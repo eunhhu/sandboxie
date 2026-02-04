@@ -135,9 +135,9 @@ export default function Dashboard(props: Props) {
           </div>
           <p class="text-sm text-muted-foreground mb-3">
             아래 내용을 <code class="bg-muted px-1.5 py-0.5 rounded">~/.ssh/config</code> 파일에 추가하면
-            <code class="bg-muted px-1.5 py-0.5 rounded">ssh user@user.sandbox.qucord.com</code>으로 간단히 접속할 수 있습니다.
+            <code class="bg-muted px-1.5 py-0.5 rounded">ssh user@user.sandbox.domain.com</code>으로 간단히 접속할 수 있습니다.
           </p>
-          <pre class="bg-muted p-4 rounded-md text-sm overflow-x-auto"><code>{`Host *.sandbox.qucord.com
+          <pre class="bg-muted p-4 rounded-md text-sm overflow-x-auto"><code>{`Host *.sandbox.domain.com
     ProxyCommand cloudflared access ssh --hostname %h
 `}</code></pre>
           <p class="text-xs text-muted-foreground mt-3">

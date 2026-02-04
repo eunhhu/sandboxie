@@ -1,13 +1,25 @@
 import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
 import { config } from './config';
 import { authRoutes } from './routes/auth';
 import { sessionRoutes } from './routes/sessions';
 
-const STATIC_DIR = resolve(
-  process.env.STATIC_DIR || resolve(import.meta.dir, '../../frontend/build')
-);
+function resolveStaticDir(): string {
+  if (process.env.STATIC_DIR) return resolve(process.env.STATIC_DIR);
+  // dev: relative to source
+  const devPath = resolve(import.meta.dir, '../../frontend/build');
+  try {
+    const f = Bun.file(resolve(devPath, 'index.html'));
+    if (f.size > 0) return devPath;
+  } catch {}
+  // compiled binary: relative to executable
+  const binDir = dirname(process.execPath);
+  return resolve(binDir, 'frontend/build');
+}
+
+const STATIC_DIR = resolveStaticDir();
+console.log(`Static dir: ${STATIC_DIR}`);
 
 const app = new Elysia()
   .use(cors())
