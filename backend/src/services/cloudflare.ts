@@ -20,22 +20,20 @@ async function cfFetch(path: string, options: RequestInit = {}): Promise<any> {
   return data;
 }
 
-const TUNNEL_ID = '855ec68d-5ff2-4bf2-a6af-9d127d205134';
-
 export async function createDnsRecord(username: string): Promise<string> {
-  if (!config.cfApiToken || !config.cfZoneId) {
+  if (!config.cfApiToken || !config.cfZoneId || !config.cfDomain || !config.cfTunnelId) {
     console.warn('Cloudflare not configured, skipping DNS record creation');
     return 'skipped';
   }
 
-  const recordName = `${username}.${config.cfDomain}`;
+  const recordName = `${username}-${config.cfDomain}`;
 
   const data = await cfFetch(`/zones/${config.cfZoneId}/dns_records`, {
     method: 'POST',
     body: JSON.stringify({
       type: 'CNAME',
       name: recordName,
-      content: `${TUNNEL_ID}.cfargotunnel.com`,
+      content: `${config.cfTunnelId}.cfargotunnel.com`,
       proxied: true,
     }),
   });
@@ -61,7 +59,7 @@ export async function findDnsRecord(subdomain: string): Promise<string | null> {
   }
 
   const data = await cfFetch(
-    `/zones/${config.cfZoneId}/dns_records?name=${subdomain}.${config.cfDomain}`
+    `/zones/${config.cfZoneId}/dns_records?name=${subdomain}-${config.cfDomain}`
   );
 
   return data.result?.[0]?.id ?? null;

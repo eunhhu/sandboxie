@@ -1,7 +1,6 @@
 import { config } from '../config';
 
 const CONFIG_PATH = '/etc/cloudflared/config.yml';
-const TUNNEL_ID = '855ec68d-5ff2-4bf2-a6af-9d127d205134';
 
 interface IngressRule {
   hostname?: string;
@@ -133,7 +132,12 @@ async function restartTunnel(): Promise<void> {
 
 
 export async function addSshIngress(username: string, sshPort: number): Promise<void> {
-  const hostname = `${username}.${config.cfDomain}`;
+  if (!config.cfDomain) {
+    console.warn('CF_DOMAIN not configured, skipping tunnel ingress');
+    return;
+  }
+
+  const hostname = `${username}-${config.cfDomain}`;
 
   const cfg = await readConfig();
 
@@ -155,7 +159,7 @@ export async function addSshIngress(username: string, sshPort: number): Promise<
 
   const newRule: IngressRule = {
     hostname,
-    service: `ssh://localhost:${sshPort}`,
+    service: `ssh://127.0.0.1:${sshPort}`,
   };
 
   cfg.ingress.splice(insertIdx, 0, newRule);
@@ -167,7 +171,12 @@ export async function addSshIngress(username: string, sshPort: number): Promise<
 }
 
 export async function removeSshIngress(username: string): Promise<void> {
-  const hostname = `${username}.${config.cfDomain}`;
+  if (!config.cfDomain) {
+    console.warn('CF_DOMAIN not configured, skipping tunnel ingress removal');
+    return;
+  }
+
+  const hostname = `${username}-${config.cfDomain}`;
 
   const cfg = await readConfig();
   const before = cfg.ingress.length;

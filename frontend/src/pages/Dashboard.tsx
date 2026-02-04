@@ -92,6 +92,14 @@ export default function Dashboard(props: Props) {
 
   const [showGuide, setShowGuide] = createSignal(false);
 
+  const getDomain = () => {
+    const s = sessions();
+    if (s.length === 0) return null;
+    const parts = s[0].subdomain.split('-');
+    parts.shift();
+    return parts.join('-');
+  };
+
   const statusColor = (status: string) => {
     switch (status) {
       case 'running': return 'bg-green-500/15 text-green-700';
@@ -135,11 +143,15 @@ export default function Dashboard(props: Props) {
           </div>
           <p class="text-sm text-muted-foreground mb-3">
             아래 내용을 <code class="bg-muted px-1.5 py-0.5 rounded">~/.ssh/config</code> 파일에 추가하면
-            <code class="bg-muted px-1.5 py-0.5 rounded">ssh user@user.sandbox.domain.com</code>으로 간단히 접속할 수 있습니다.
+            {getDomain()
+              ? <><code class="bg-muted px-1.5 py-0.5 rounded">ssh user@user-{getDomain()}</code>으로 간단히 접속할 수 있습니다.</>
+              : <>SSH 접속 시 ProxyCommand가 자동으로 적용됩니다.</>
+            }
           </p>
-          <pre class="bg-muted p-4 rounded-md text-sm overflow-x-auto"><code>{`Host *.sandbox.domain.com
-    ProxyCommand cloudflared access ssh --hostname %h
-`}</code></pre>
+          <pre class="bg-muted p-4 rounded-md text-sm overflow-x-auto"><code>{getDomain()
+            ? `Host *-${getDomain()}\n    ProxyCommand cloudflared access ssh --hostname %h\n`
+            : `Host *-your.domain.com\n    ProxyCommand cloudflared access ssh --hostname %h\n`
+          }</code></pre>
           <p class="text-xs text-muted-foreground mt-3">
             cloudflared 설치: <code class="bg-muted px-1 py-0.5 rounded">brew install cloudflared</code> (macOS)
             | <a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/" target="_blank" class="underline">다운로드</a> (Linux/Windows)

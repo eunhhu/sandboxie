@@ -3,7 +3,7 @@
 친구나 지인에게 격리된 터미널 환경을 제공하고, 웹 대시보드를 통해 세션을 관리하는 시스템.
 
 사용자별로 독립된 Podman 컨테이너를 생성하고, Cloudflare Tunnel을 통해 SSH로 접속할 수 있는 샌드박스 환경을 제공한다.
-`{username}.sandbox.qucord.com` 형태의 서브도메인이 자동 등록된다.
+`{username}-{CF_DOMAIN}` 형태의 서브도메인이 자동 등록된다.
 
 ## 기술 스택
 
@@ -26,7 +26,7 @@
 
 - **Host:** Raspberry Pi 5 (8GB)
 - **OS:** Debian 13 (trixie), aarch64
-- **Domain:** `sandbox.qucord.com`
+- **Domain:** `CF_DOMAIN` 환경변수로 설정
 - **Tunnel:** Cloudflare Tunnel (`cloudflared`)
 
 ## 프로젝트 구조
@@ -105,7 +105,8 @@ cp .env.example .env
 | `JWT_SECRET` | O | JWT 서명 시크릿 | - |
 | `CF_API_TOKEN` | | Cloudflare API 토큰 | (없으면 DNS 생략) |
 | `CF_ZONE_ID` | | Cloudflare Zone ID | (없으면 DNS 생략) |
-| `CF_DOMAIN` | | 기본 도메인 | `sandbox.qucord.com` |
+| `CF_DOMAIN` | | 기본 도메인 (예: `sandbox.yourdomain.com`) | (비워두면 DNS 생략) |
+| `CF_TUNNEL_ID` | | Cloudflare Tunnel ID | (비워두면 DNS 생략) |
 | `PORT` | | 서버 포트 | `3000` |
 | `HOST` | | 서버 호스트 | `0.0.0.0` |
 | `SANDBOX_IMAGE` | | 컨테이너 이미지 | `localhost/sandboxie:latest` |
@@ -205,14 +206,14 @@ Cloudflare Tunnel을 통해 SSH 접속한다. 클라이언트에 `cloudflared`�
 `~/.ssh/config`에 아래 내용을 추가:
 
 ```
-Host *.sandbox.qucord.com
+Host *-sandbox.yourdomain.com
     ProxyCommand cloudflared access ssh --hostname %h
 ```
 
 ### 2. 접속
 
 ```bash
-ssh alice@alice.sandbox.qucord.com
+ssh alice@alice-sandbox.yourdomain.com
 ```
 
 ### cloudflared 설치
@@ -341,7 +342,7 @@ bun test               # E2E 테스트 실행
 | id | UUID | PK, 자동 생성 |
 | username | varchar(30) | 영문/숫자, unique |
 | password | varchar(255) | bcrypt 해시 |
-| subdomain | varchar(255) | `{username}.sandbox.qucord.com`, unique |
+| subdomain | varchar(255) | `{username}-{CF_DOMAIN}`, unique |
 | sshPort | integer | 2200-2299, unique |
 | containerName | varchar(100) | `sandbox-{username}`, unique |
 | memoryLimit | integer | MB (기본값 256) |

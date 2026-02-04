@@ -41,7 +41,9 @@ export async function createSession(opts: {
 }): Promise<Session> {
   const sshPort = await allocatePort();
   const containerName = `sandbox-${opts.username}`;
-  const subdomain = `${opts.username}.${config.cfDomain}`;
+  const subdomain = config.cfDomain
+    ? `${opts.username}-${config.cfDomain}`
+    : opts.username;
   const hashedPassword = await hashPassword(opts.password);
 
   await podman.createContainer({

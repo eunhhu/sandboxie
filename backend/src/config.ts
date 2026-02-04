@@ -21,7 +21,8 @@ export const config = {
 
   cfApiToken: optional('CF_API_TOKEN', ''),
   cfZoneId: optional('CF_ZONE_ID', ''),
-  cfDomain: optional('CF_DOMAIN', 'sandbox.domain.com'),
+  cfDomain: optional('CF_DOMAIN', ''),
+  cfTunnelId: optional('CF_TUNNEL_ID', ''),
 
   sandboxImage: optional('SANDBOX_IMAGE', 'localhost/sandboxie:latest'),
   sshPortStart: parseInt(optional('SSH_PORT_START', '2200'), 10),
