@@ -20,23 +20,41 @@ async function cfFetch(path: string, options: RequestInit = {}): Promise<any> {
   return data;
 }
 
-export async function createDnsRecord(subdomain: string, target: string): Promise<string> {
+export async function createDnsRecord(username: string): Promise<string> {
   if (!config.cfApiToken || !config.cfZoneId) {
     console.warn('Cloudflare not configured, skipping DNS record creation');
     return 'skipped';
   }
 
+  const serverIp = await getPublicIp();
+  const recordName = `${username}.${config.cfDomain}`;
+
   const data = await cfFetch(`/zones/${config.cfZoneId}/dns_records`, {
     method: 'POST',
     body: JSON.stringify({
-      type: 'CNAME',
-      name: subdomain,
-      content: target,
+      type: 'A',
+      name: recordName,
+      content: serverIp,
       proxied: false,
+      ttl: 300,
     }),
   });
 
   return data.result.id;
+}
+
+let _publicIp: string | null = null;
+
+async function getPublicIp(): Promise<string> {
+  if (_publicIp) return _publicIp;
+  try {
+    const res = await fetch('https://api.ipify.org');
+    _publicIp = (await res.text()).trim();
+  } catch {
+    const res = await fetch('https://ifconfig.me/ip', { headers: { 'User-Agent': 'curl/8.0' } });
+    _publicIp = (await res.text()).trim();
+  }
+  return _publicIp!;
 }
 
 export async function deleteDnsRecord(recordId: string): Promise<void> {

@@ -235,7 +235,7 @@ export default function Dashboard(props: Props) {
                     </td>
                     <td class="p-4 align-middle">
                       <code class="text-xs bg-muted px-2 py-1 rounded">
-                        ssh {session.username}@sandbox.qucord.com -p {session.sshPort}
+                        ssh {session.username}@{session.subdomain} -p {session.sshPort}
                       </code>
                     </td>
                     <td class="p-4 align-middle text-sm text-muted-foreground">

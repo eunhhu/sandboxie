@@ -52,7 +52,11 @@ export async function createSession(opts: {
     cpuLimit: opts.cpuLimit ?? 0.5,
   });
 
-  await cloudflare.createDnsRecord(opts.username, config.cfDomain);
+  try {
+    await cloudflare.createDnsRecord(opts.username);
+  } catch (err) {
+    console.warn(`DNS record creation failed for ${opts.username}:`, err instanceof Error ? err.message : err);
+  }
 
   const expiresAt = opts.ttl
     ? new Date(Date.now() + opts.ttl * 1000)
@@ -84,9 +88,13 @@ export async function deleteSession(username: string): Promise<void> {
 
   await podman.removeContainer(session.containerName);
 
-  const recordId = await cloudflare.findDnsRecord(username);
-  if (recordId) {
-    await cloudflare.deleteDnsRecord(recordId);
+  try {
+    const recordId = await cloudflare.findDnsRecord(username);
+    if (recordId) {
+      await cloudflare.deleteDnsRecord(recordId);
+    }
+  } catch (err) {
+    console.warn(`DNS record deletion failed for ${username}:`, err instanceof Error ? err.message : err);
   }
 
   await db.delete(sessions).where(eq(sessions.username, username));
