@@ -4,6 +4,7 @@ import { resolve, dirname } from 'path';
 import { config } from './config';
 import { authRoutes } from './routes/auth';
 import { sessionRoutes } from './routes/sessions';
+import { terminalRoutes } from './routes/terminal';
 
 function resolveStaticDir(): string {
   if (process.env.STATIC_DIR) return resolve(process.env.STATIC_DIR);
@@ -25,6 +26,7 @@ const app = new Elysia()
   .get('/api/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
   .use(authRoutes)
   .use(sessionRoutes)
+  .use(terminalRoutes)
   .get('/*', async ({ path }) => {
     const indexFile = resolve(STATIC_DIR, 'index.html');
 

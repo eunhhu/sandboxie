@@ -1,5 +1,5 @@
 export async function hashPassword(password: string): Promise<string> {
-  return Bun.password.hash(password, { algorithm: 'bcrypt', cost: 10 });
+  return Bun.password.hash(password, { algorithm: 'argon2id' });
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {

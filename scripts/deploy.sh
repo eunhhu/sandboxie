@@ -12,13 +12,14 @@ bun run --cwd "$SRC_DIR/frontend" build
 
 # 2. 백엔드 컴파일
 echo "[2/4] Compiling backend..."
-bun build --compile "$SRC_DIR/backend/src/index.ts" --outfile "$DEPLOY_DIR/sandboxie"
+bun build --compile "$SRC_DIR/backend/src/index.ts" --outfile "$DEPLOY_DIR/sandboxie" --external cpu-features
 
-# 3. 정적 파일 복사
-echo "[3/4] Copying static files..."
+# 3. 정적 파일 및 node_modules 복사
+echo "[3/4] Copying static files and native modules..."
 rm -rf "$DEPLOY_DIR/frontend"
 mkdir -p "$DEPLOY_DIR/frontend"
 cp -r "$SRC_DIR/frontend/build" "$DEPLOY_DIR/frontend/build"
+
 
 # .env 파일 복사 (최초 1회 또는 변경 시)
 if [ ! -f "$DEPLOY_DIR/.env" ]; then

@@ -3,6 +3,7 @@ import { getSessions, createSession, deleteSession, restartSession, type Session
 
 interface Props {
   onLogout: () => void;
+  onOpenTerminal: (username: string) => void;
 }
 
 export default function Dashboard(props: Props) {
@@ -276,6 +277,13 @@ export default function Dashboard(props: Props) {
                 </div>
                 <div class="flex gap-2 mt-3 pt-3 border-t">
                   <button
+                    onClick={() => props.onOpenTerminal(session.username)}
+                    disabled={session.status !== 'running'}
+                    class="flex-1 inline-flex items-center justify-center rounded-md text-xs bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3 disabled:opacity-40"
+                  >
+                    터미널
+                  </button>
+                  <button
                     onClick={() => handleRestart(session.username)}
                     class="flex-1 inline-flex items-center justify-center rounded-md text-xs border border-input bg-background hover:bg-accent h-8 px-3"
                   >
@@ -329,6 +337,13 @@ export default function Dashboard(props: Props) {
                     </td>
                     <td class="p-4 align-middle text-right">
                       <div class="flex justify-end gap-2">
+                        <button
+                          onClick={() => props.onOpenTerminal(session.username)}
+                          disabled={session.status !== 'running'}
+                          class="inline-flex items-center justify-center rounded-md text-xs bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3 disabled:opacity-40"
+                        >
+                          터미널
+                        </button>
                         <button
                           onClick={() => handleRestart(session.username)}
                           class="inline-flex items-center justify-center rounded-md text-xs border border-input bg-background hover:bg-accent h-8 px-3"

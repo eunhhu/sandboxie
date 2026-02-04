@@ -118,16 +118,29 @@ async function writeConfig(cfg: TunnelConfig): Promise<void> {
   }
 }
 
-async function restartTunnel(): Promise<void> {
-  const proc = Bun.spawn(['sudo', 'systemctl', 'restart', 'cloudflared'], {
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text();
-    throw new Error(`Failed to restart cloudflared: ${stderr}`);
-  }
+let restartTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleRestartTunnel(): void {
+  // 응답이 클라이언트에 전달된 뒤 재시작되도록 딜레이
+  if (restartTimer) clearTimeout(restartTimer);
+  restartTimer = setTimeout(async () => {
+    restartTimer = null;
+    try {
+      const proc = Bun.spawn(['sudo', 'systemctl', 'restart', 'cloudflared'], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) {
+        const stderr = await new Response(proc.stderr).text();
+        console.error(`Failed to restart cloudflared: ${stderr}`);
+      } else {
+        console.log('cloudflared restarted successfully');
+      }
+    } catch (err) {
+      console.error('cloudflared restart error:', err);
+    }
+  }, 2000);
 }
 
 
@@ -165,7 +178,7 @@ export async function addSshIngress(username: string, sshPort: number): Promise<
   cfg.ingress.splice(insertIdx, 0, newRule);
 
   await writeConfig(cfg);
-  await restartTunnel();
+  scheduleRestartTunnel();
 
   console.log(`Tunnel ingress added: ${hostname} → ssh://localhost:${sshPort}`);
 }
@@ -188,7 +201,7 @@ export async function removeSshIngress(username: string): Promise<void> {
   }
 
   await writeConfig(cfg);
-  await restartTunnel();
+  scheduleRestartTunnel();
 
   console.log(`Tunnel ingress removed: ${hostname}`);
 }
