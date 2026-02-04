@@ -16,12 +16,14 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     ca-certificates \
     locales \
+    tmux \
+    gh \
     && rm -rf /var/lib/apt/lists/*
 
 RUN locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8
 
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 

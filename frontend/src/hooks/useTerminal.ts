@@ -50,6 +50,7 @@ export function useTerminal(username: string) {
       cursorBlink: true,
       scrollback: 5000,
       allowProposedApi: true,
+      scrollOnUserInput: true,
     });
 
     fitAddon = new FitAddon();
@@ -205,6 +206,7 @@ export function useTerminal(username: string) {
   return {
     status,
     errorMessage,
+    terminalInstance: () => terminal,
     createTerminal,
     connect,
     disconnect,
