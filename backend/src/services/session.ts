@@ -6,6 +6,7 @@ import { hashPassword } from '../utils/password';
 import { allocatePort } from '../utils/port-allocator';
 import * as podman from './podman';
 import * as cloudflare from './cloudflare';
+import * as tunnel from './tunnel';
 
 export async function listSessions() {
   return db.select({
@@ -58,6 +59,12 @@ export async function createSession(opts: {
     console.warn(`DNS record creation failed for ${opts.username}:`, err instanceof Error ? err.message : err);
   }
 
+  try {
+    await tunnel.addSshIngress(opts.username, sshPort);
+  } catch (err) {
+    console.warn(`Tunnel ingress creation failed for ${opts.username}:`, err instanceof Error ? err.message : err);
+  }
+
   const expiresAt = opts.ttl
     ? new Date(Date.now() + opts.ttl * 1000)
     : null;
@@ -87,6 +94,12 @@ export async function deleteSession(username: string): Promise<void> {
   }
 
   await podman.removeContainer(session.containerName);
+
+  try {
+    await tunnel.removeSshIngress(username);
+  } catch (err) {
+    console.warn(`Tunnel ingress removal failed for ${username}:`, err instanceof Error ? err.message : err);
+  }
 
   try {
     const recordId = await cloudflare.findDnsRecord(username);

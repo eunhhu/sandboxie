@@ -43,7 +43,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api/sessions' })
       const { password: _, ...sessionData } = session;
       return {
         session: sessionData,
-        sshCommand: `ssh ${username}@${session.subdomain} -p ${session.sshPort}`,
+        sshCommand: `ssh ${username}@${session.subdomain}`,
       };
     } catch (err) {
       set.status = 500;

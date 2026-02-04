@@ -90,6 +90,8 @@ export default function Dashboard(props: Props) {
     props.onLogout();
   };
 
+  const [showGuide, setShowGuide] = createSignal(false);
+
   const statusColor = (status: string) => {
     switch (status) {
       case 'running': return 'bg-green-500/15 text-green-700';
@@ -105,6 +107,12 @@ export default function Dashboard(props: Props) {
         <h1 class="text-2xl font-bold">Sandbox Manager</h1>
         <div class="flex gap-2">
           <button
+            onClick={() => setShowGuide(!showGuide())}
+            class="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2"
+          >
+            접속 가이드
+          </button>
+          <button
             onClick={() => setShowForm(!showForm())}
             class="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
           >
@@ -118,6 +126,26 @@ export default function Dashboard(props: Props) {
           </button>
         </div>
       </div>
+
+      <Show when={showGuide()}>
+        <div class="rounded-lg border bg-card p-6 mb-6">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold">SSH 접속 설정</h2>
+            <button onClick={() => setShowGuide(false)} class="text-muted-foreground hover:text-foreground text-sm">닫기</button>
+          </div>
+          <p class="text-sm text-muted-foreground mb-3">
+            아래 내용을 <code class="bg-muted px-1.5 py-0.5 rounded">~/.ssh/config</code> 파일에 추가하면
+            <code class="bg-muted px-1.5 py-0.5 rounded">ssh user@user.sandbox.qucord.com</code>으로 간단히 접속할 수 있습니다.
+          </p>
+          <pre class="bg-muted p-4 rounded-md text-sm overflow-x-auto"><code>{`Host *.sandbox.qucord.com
+    ProxyCommand cloudflared access ssh --hostname %h
+`}</code></pre>
+          <p class="text-xs text-muted-foreground mt-3">
+            cloudflared 설치: <code class="bg-muted px-1 py-0.5 rounded">brew install cloudflared</code> (macOS)
+            | <a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/" target="_blank" class="underline">다운로드</a> (Linux/Windows)
+          </p>
+        </div>
+      </Show>
 
       <Show when={showForm()}>
         <div class="rounded-lg border bg-card p-6 mb-6">
@@ -235,7 +263,7 @@ export default function Dashboard(props: Props) {
                     </td>
                     <td class="p-4 align-middle">
                       <code class="text-xs bg-muted px-2 py-1 rounded">
-                        ssh {session.username}@{session.subdomain} -p {session.sshPort}
+                        ssh {session.username}@{session.subdomain}
                       </code>
                     </td>
                     <td class="p-4 align-middle text-sm text-muted-foreground">
