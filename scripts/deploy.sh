@@ -12,7 +12,7 @@ bun run --cwd "$SRC_DIR/frontend" build
 
 # 2. 백엔드 컴파일
 echo "[2/4] Compiling backend..."
-bun build --compile --production "$SRC_DIR/backend/src/index.ts" --outfile "$DEPLOY_DIR/sandboxie"
+bun build --compile "$SRC_DIR/backend/src/index.ts" --outfile "$DEPLOY_DIR/sandboxie"
 
 # 3. 정적 파일 복사
 echo "[3/4] Copying static files..."

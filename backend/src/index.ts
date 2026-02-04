@@ -19,7 +19,6 @@ function resolveStaticDir(): string {
 }
 
 const STATIC_DIR = resolveStaticDir();
-console.log(`Static dir: ${STATIC_DIR}`);
 
 const app = new Elysia()
   .use(cors())
