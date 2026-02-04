@@ -1,0 +1,23 @@
+{
+  "name": "sandboxie-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.36.0",
+    "elysia": "^1.2.0",
+    "@elysiajs/cors": "^1.2.0",
+    "@elysiajs/bearer": "^1.2.0",
+    "@elysiajs/jwt": "^1.2.0",
+    "@elysiajs/static": "^1.2.0",
+    "postgres": "^3.4.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.28.0",
+    "typescript": "^5.7.0",
+    "@types/bun": "latest"
+  }
+}

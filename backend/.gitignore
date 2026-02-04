@@ -1,0 +1,5 @@
+drizzle/*.sql
+drizzle/meta/
+drizzle/migrations/
+drizzle/seed/
+drizzle/seeded/

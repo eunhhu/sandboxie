@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: sandboxie-db
+    environment:
+      POSTGRES_USER: sandboxie
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sandboxie}
+      POSTGRES_DB: sandboxie
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
