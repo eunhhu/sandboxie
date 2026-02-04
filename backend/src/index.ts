@@ -5,7 +5,9 @@ import { config } from './config';
 import { authRoutes } from './routes/auth';
 import { sessionRoutes } from './routes/sessions';
 
-const STATIC_DIR = resolve(import.meta.dir, '../../frontend/build');
+const STATIC_DIR = resolve(
+  process.env.STATIC_DIR || resolve(import.meta.dir, '../../frontend/build')
+);
 
 const app = new Elysia()
   .use(cors())

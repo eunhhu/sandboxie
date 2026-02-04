@@ -11,7 +11,8 @@
     "db:down": "podman compose down",
     "db:generate": "bun run --cwd backend drizzle-kit generate",
     "db:migrate": "bun run backend/src/db/migrate.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "deploy": "bash scripts/deploy.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.1",
