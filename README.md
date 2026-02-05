@@ -1,184 +1,679 @@
 # Sandboxie
 
-친구나 지인에게 격리된 터미널 환경을 제공하고, 웹 대시보드를 통해 세션을 관리하는 시스템.
+A containerized sandbox management system that provides isolated Linux terminal environments accessible via web browsers. Perfect for provisioning temporary development environments for friends, students, or workshop participants.
 
-사용자별로 독립된 Podman 컨테이너를 생성하고, Cloudflare Tunnel을 통해 SSH로 접속할 수 있는 샌드박스 환경을 제공한다.
-`{username}-{CF_DOMAIN}` 형태의 서브도메인이 자동 등록된다.
+## Overview
 
-## 기술 스택
+Sandboxie creates isolated Podman containers for each user, providing a fully-featured Ubuntu 22.04 development environment with SSH access. Users connect through a web-based terminal or via Cloudflare Tunnel-proxied SSH. The system automatically handles DNS subdomain registration, resource limiting, and session lifecycle management.
 
-| 영역 | 기술 |
-|------|------|
-| Runtime | Bun |
-| Backend | Elysia.js |
-| Frontend | Vite + SolidJS (CSR) |
-| Styling | Tailwind CSS |
-| Database | PostgreSQL 15 (Podman 컨테이너) |
-| ORM | Drizzle ORM |
-| Container | Podman (rootless) |
-| DNS | Cloudflare API (CNAME → Tunnel) |
-| SSH Proxy | Cloudflare Tunnel (cloudflared) |
-| Auth | JWT (Bearer Token) |
-| Password | bcrypt (Bun.password) |
-| E2E Test | Playwright |
+### Key Features
 
-## 인프라
+- **Isolated Environments**: Each user gets a dedicated Podman container with no access to the host system
+- **Web Terminal**: Browser-based terminal emulation via xterm.js and WebSocket
+- **SSH Access**: Direct SSH connections through Cloudflare Tunnel (no port forwarding required)
+- **HTTP Tunneling**: Expose web servers running in containers via Cloudflare Tunnel
+- **Resource Control**: CPU and memory limits per session (cgroup v2 dependent)
+- **Auto DNS**: Automatic subdomain creation via Cloudflare API
+- **Admin Dashboard**: Web UI for session management, monitoring, and creation
+- **Security First**: Rate-limited authentication, Argon2id password hashing, JWT tokens
+- **Single Binary Deployment**: Compile to a single executable with Bun
 
-- **Host:** Raspberry Pi 5 (8GB)
-- **OS:** Debian 13 (trixie), aarch64
-- **Domain:** `CF_DOMAIN` 환경변수로 설정
-- **Tunnel:** Cloudflare Tunnel (`cloudflared`)
+## Technology Stack
 
-## 프로젝트 구조
+| Layer | Technology |
+|-------|------------|
+| Runtime | [Bun](https://bun.sh) 1.3+ |
+| Backend Framework | [Elysia.js](https://elysiajs.com) 1.2+ |
+| Frontend | [Vite](https://vitejs.dev) + [SolidJS](https://www.solidjs.com) (CSR/SPA) |
+| Styling | [Tailwind CSS](https://tailwindcss.com) 3.4 |
+| Database | PostgreSQL 15 (Podman container) |
+| ORM | [Drizzle ORM](https://orm.drizzle.team) |
+| Container Runtime | [Podman](https://podman.io) 5.4+ (rootless mode) |
+| Terminal | [xterm.js](https://xtermjs.org) 6.0 + FitAddon + WebLinksAddon |
+| SSH Client | [ssh2](https://github.com/mscdex/ssh2) |
+| Tunnel/DNS | [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/) + DNS API |
+| Password Hashing | Argon2id (via `Bun.password`) |
+| E2E Testing | [Playwright](https://playwright.dev) 1.58 |
+
+## Architecture
+
+```
+                                    ┌─────────────────────────────────────────────┐
+                                    │              Cloudflare Edge                │
+                                    │  ┌─────────────┐    ┌─────────────────────┐ │
+                                    │  │  DNS CNAME  │    │  Cloudflare Tunnel  │ │
+                                    │  │  Records    │───▶│  (cloudflared)      │ │
+                                    │  └─────────────┘    └──────────┬──────────┘ │
+                                    └──────────────────────────────────────────────┘
+                                                                     │
+                    ┌────────────────────────────────────────────────┼─────────────┐
+                    │                     Host Server                │             │
+                    │                                                ▼             │
+                    │  ┌─────────────────────────────────────────────────────────┐ │
+                    │  │                   Sandboxie Server                      │ │
+                    │  │  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐  │ │
+                    │  │  │  REST API    │  │  WebSocket   │  │ Static Files  │  │ │
+                    │  │  │  (Elysia)    │  │  Terminal    │  │ (SPA)         │  │ │
+                    │  │  └──────┬───────┘  └──────┬───────┘  └───────────────┘  │ │
+                    │  │         │                 │                              │ │
+                    │  │  ┌──────┴─────────────────┴──────┐                       │ │
+                    │  │  │         Services              │                       │ │
+                    │  │  │  ┌─────────┐ ┌─────────────┐  │                       │ │
+                    │  │  │  │ Podman  │ │ Cloudflare  │  │                       │ │
+                    │  │  │  │ Manager │ │ DNS/Tunnel  │  │                       │ │
+                    │  │  │  └────┬────┘ └─────────────┘  │                       │ │
+                    │  │  └───────┼───────────────────────┘                       │ │
+                    │  └──────────┼───────────────────────────────────────────────┘ │
+                    │             │                                                 │
+                    │  ┌──────────┼──────────────────────────────────────────────┐  │
+                    │  │          ▼           Podman Containers                  │  │
+                    │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │  │
+                    │  │  │ sandbox-alice│ │sandbox-bob  │  │sandbox-...  │      │  │
+                    │  │  │  :2200→22   │  │  :2201→22   │  │  :22XX→22   │      │  │
+                    │  │  │  :3200→80   │  │  :3201→80   │  │  :32XX→80   │      │  │
+                    │  │  │  Ubuntu     │  │  Ubuntu     │  │  Ubuntu     │      │  │
+                    │  │  │  22.04      │  │  22.04      │  │  22.04      │      │  │
+                    │  │  └─────────────┘  └─────────────┘  └─────────────┘      │  │
+                    │  └─────────────────────────────────────────────────────────┘  │
+                    │                                                               │
+                    │  ┌─────────────────┐                                          │
+                    │  │   PostgreSQL    │                                          │
+                    │  │   (sessions)    │                                          │
+                    │  └─────────────────┘                                          │
+                    └───────────────────────────────────────────────────────────────┘
+```
+
+### Request Flow
+
+1. **Web Terminal**: Browser → Sandboxie WebSocket → ssh2 → Container SSH
+2. **Direct SSH**: User SSH Client → cloudflared → Cloudflare Tunnel → Host Port → Container SSH
+3. **HTTP Access**: Browser → Cloudflare Tunnel → Host Port → Container Port 80
+
+## Project Structure
 
 ```
 sandboxie/
-├── backend/
+├── backend/                              # Elysia.js backend server
 │   ├── src/
-│   │   ├── index.ts              # Elysia 서버 진입점 + 정적 파일 서빙
-│   │   ├── config.ts             # 환경변수 로딩
+│   │   ├── index.ts                     # Server entry point + static file serving
+│   │   ├── config.ts                    # Environment variable loader with validation
 │   │   ├── db/
-│   │   │   ├── index.ts          # Drizzle 클라이언트
-│   │   │   ├── schema.ts         # sessions 테이블 정의
-│   │   │   └── migrate.ts        # 마이그레이션 실행
+│   │   │   ├── index.ts                 # Drizzle ORM client initialization
+│   │   │   ├── schema.ts                # Session table schema (status enum, constraints)
+│   │   │   └── migrate.ts               # Migration runner
 │   │   ├── routes/
-│   │   │   ├── auth.ts           # POST /api/auth/login
-│   │   │   └── sessions.ts       # 세션 CRUD API
+│   │   │   ├── auth.ts                  # POST /api/auth/login (rate-limited)
+│   │   │   ├── sessions.ts              # Session CRUD endpoints (JWT protected)
+│   │   │   └── terminal.ts              # WebSocket terminal proxy (ssh2)
 │   │   ├── services/
-│   │   │   ├── session.ts        # 세션 비즈니스 로직
-│   │   │   ├── podman.ts         # Podman CLI 래퍼
-│   │   │   ├── cloudflare.ts     # Cloudflare DNS API (CNAME)
-│   │   │   └── tunnel.ts         # Cloudflare Tunnel 인그레스 관리
+│   │   │   ├── session.ts               # Session lifecycle (create/delete/restart)
+│   │   │   ├── podman.ts                # Podman CLI wrapper (cgroup detection)
+│   │   │   ├── cloudflare.ts            # DNS CNAME record management
+│   │   │   ├── tunnel.ts                # Tunnel ingress config (YAML manipulation)
+│   │   │   └── ssh.ts                   # SSH2 client connection handler
 │   │   ├── middleware/
-│   │   │   └── auth.ts           # JWT 인증 미들웨어
+│   │   │   └── auth.ts                  # JWT verification guard (jwtPlugin + verifyAuth)
 │   │   └── utils/
-│   │       ├── password.ts       # bcrypt 해싱
-│   │       └── port-allocator.ts # SSH 포트 할당
-│   └── drizzle/                  # 마이그레이션 파일
-├── frontend/
+│   │       ├── password.ts              # Argon2id hashing utilities
+│   │       └── port-allocator.ts        # SSH/HTTP port pool allocation
+│   ├── drizzle/                         # SQL migration files
+│   │   ├── 0000_initial.sql
+│   │   └── 0001_add_http_port.sql
+│   ├── drizzle.config.ts                # Drizzle Kit configuration
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── frontend/                             # Vite + SolidJS frontend
 │   ├── src/
-│   │   ├── App.tsx               # 루트 컴포넌트 (로그인/대시보드 전환)
-│   │   ├── api.ts                # API 클라이언트
-│   │   └── pages/
-│   │       ├── Login.tsx          # 관리자 로그인
-│   │       └── Dashboard.tsx      # 세션 관리 대시보드
-│   └── build/                    # 빌드 출력 (백엔드에서 서빙)
-├── container/
-│   ├── Containerfile             # Ubuntu 22.04 기반 샌드박스 이미지
-│   └── entrypoint.sh             # 사용자 생성 + SSH 서버 시작
-├── e2e/
-│   └── app.spec.ts               # Playwright E2E 테스트
+│   │   ├── index.tsx                    # Application entry point
+│   │   ├── App.tsx                      # Root router (Login/Dashboard/Terminal)
+│   │   ├── api.ts                       # API client with auth header injection
+│   │   ├── index.css                    # Tailwind CSS imports + global styles
+│   │   ├── pages/
+│   │   │   ├── Login.tsx                # Admin password form with rate limit display
+│   │   │   ├── Dashboard.tsx            # Session management UI (create/delete/restart)
+│   │   │   └── Terminal.tsx             # xterm.js terminal with mobile keyboard support
+│   │   └── hooks/
+│   │       └── useTerminal.ts           # Terminal state management hook
+│   ├── build/                           # Production build output (served by backend)
+│   ├── vite.config.ts                   # Vite configuration (SPA mode)
+│   ├── tailwind.config.js
+│   ├── postcss.config.js
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── container/                            # Sandbox container image definition
+│   ├── Containerfile                    # Ubuntu 22.04 + Node.js + Bun + dev tools
+│   └── entrypoint.sh                    # User creation + SSH server + zsh setup
+│
+├── e2e/                                  # End-to-end tests
+│   └── app.spec.ts                      # Playwright test suite
+│
 ├── scripts/
-│   └── deploy.sh                 # 프로덕션 배포 스크립트
-├── docker-compose.yml            # PostgreSQL 컨테이너
-├── playwright.config.ts          # E2E 테스트 설정
-├── .env.example                  # 환경변수 템플릿
-└── package.json                  # Bun workspace 루트
+│   ├── deploy.sh                        # Production deployment script
+│   └── hash-password.ts                 # Admin password hash generator
+│
+├── docker-compose.yml                    # PostgreSQL 15 service definition
+├── playwright.config.ts                  # Playwright test configuration
+├── tsconfig.base.json                    # Shared TypeScript configuration
+├── .env.example                          # Environment variable template
+└── package.json                          # Bun workspace root (monorepo)
 ```
 
-## 설치 및 실행
+## Prerequisites
 
-### 사전 요구사항
+### System Requirements
 
-- [Bun](https://bun.sh) v1.0+
-- [Podman](https://podman.io) v4.0+
-- podman-compose
-- [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/) (SSH 터널링)
+- **OS**: Linux (tested on Debian 13/trixie, aarch64)
+- **Runtime**: [Bun](https://bun.sh) v1.0 or later
+- **Container**: [Podman](https://podman.io) v4.0+ (rootless mode recommended)
+- **Database**: PostgreSQL 15 (provided via `docker-compose.yml`)
+- **Tunnel**: [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/) (optional, for SSH/HTTP access)
 
-### 1. 의존성 설치
+### Hardware Tested
+
+- Raspberry Pi 5 (8GB RAM, Debian 13 trixie, aarch64)
+- Standard x86_64 Linux servers
+
+## Installation
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/yourusername/sandboxie.git
+cd sandboxie
+```
+
+### 2. Install Dependencies
 
 ```bash
 bun install
 ```
 
-### 2. 환경변수 설정
+### 3. Configure Environment Variables
 
 ```bash
 cp .env.example .env
-# .env 파일을 수정하여 실제 값 입력
 ```
 
-| 변수 | 필수 | 설명 | 기본값 |
-|------|:---:|------|--------|
-| `DATABASE_URL` | O | PostgreSQL 연결 문자열 | - |
-| `ADMIN_PASSWORD_HASH` | O | 대시보드 관리자 비밀번호 해시 (Argon2id) | - |
-| `JWT_SECRET` | O | JWT 서명 시크릿 | - |
-| `CF_API_TOKEN` | | Cloudflare API 토큰 | (없으면 DNS 생략) |
-| `CF_ZONE_ID` | | Cloudflare Zone ID | (없으면 DNS 생략) |
-| `CF_DOMAIN` | | 기본 도메인 (예: `sandbox.yourdomain.com`) | (비워두면 DNS 생략) |
-| `CF_TUNNEL_ID` | | Cloudflare Tunnel ID | (비워두면 DNS 생략) |
-| `PORT` | | 서버 포트 | `3000` |
-| `HOST` | | 서버 호스트 | `0.0.0.0` |
-| `SANDBOX_IMAGE` | | 컨테이너 이미지 | `localhost/sandboxie:latest` |
-| `SSH_PORT_START` | | SSH 포트 범위 시작 | `2200` |
-| `SSH_PORT_END` | | SSH 포트 범위 끝 | `2299` |
+Edit `.env` with your values:
 
-### 관리자 비밀번호 해시 생성
+| Variable | Required | Description | Default |
+|----------|:--------:|-------------|---------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string | - |
+| `DB_PASSWORD` | Yes | Database password (for docker-compose) | - |
+| `ADMIN_PASSWORD_HASH` | Yes | Argon2id hash of admin password | - |
+| `JWT_SECRET` | Yes | Secret key for JWT signing (min 32 chars) | - |
+| `CF_API_TOKEN` | No | Cloudflare API token (Zone:Edit, DNS:Edit) | - |
+| `CF_ZONE_ID` | No | Cloudflare Zone ID | - |
+| `CF_DOMAIN` | No | Base domain (e.g., `sandbox.example.com`) | - |
+| `CF_TUNNEL_ID` | No | Cloudflare Tunnel ID | - |
+| `PORT` | No | Server listen port | `3000` |
+| `HOST` | No | Server listen address | `0.0.0.0` |
+| `SANDBOX_IMAGE` | No | Container image name | `localhost/sandboxie:latest` |
+| `SSH_PORT_START` | No | SSH port range start | `2200` |
+| `SSH_PORT_END` | No | SSH port range end | `2299` |
+| `STATIC_DIR` | No | Frontend build directory | Auto-detected |
 
-보안을 위해 관리자 비밀번호는 Argon2id로 해싱된 값을 사용합니다.
+### 4. Generate Admin Password Hash
+
+The admin password must be stored as an Argon2id hash for security:
 
 ```bash
-# 비밀번호 해시 생성
 bun run scripts/hash-password.ts your-secure-password
+```
 
-# 출력된 해시값을 .env 파일에 복사
+Copy the output hash to your `.env` file:
+
+```env
 ADMIN_PASSWORD_HASH=$argon2id$v=19$m=65536,t=2,p=1$...
 ```
 
-### 3. PostgreSQL 실행
+### 5. Start PostgreSQL
 
 ```bash
 bun run db:up
 ```
 
-### 4. 데이터베이스 마이그레이션
+### 6. Run Database Migrations
 
 ```bash
+# Generate migrations (if schema changed)
 bun run db:generate
+
+# Apply migrations
 bun run db:migrate
 ```
 
-### 5. 샌드박스 컨테이너 이미지 빌드
+### 7. Build the Sandbox Container Image
 
 ```bash
 podman build -t localhost/sandboxie:latest container/
 ```
 
-### 6. 프론트엔드 빌드
+**Important**: The image name must use `localhost/` prefix for Podman to find it without registry lookups.
+
+### 8. Build Frontend
 
 ```bash
 bun run build
 ```
 
-### 7. 서버 실행
+### 9. Start the Server
 
 ```bash
-# 개발 모드 (watch)
+# Development mode (with hot reload)
 bun run dev:backend
 
-# 프로덕션
+# Production mode
 bun run start
 ```
 
-## 프로덕션 배포
+Access the dashboard at `http://localhost:3000`.
 
-`/opt/sandboxie/`에 컴파일된 바이너리 + 정적 파일을 배포한다.
+## Cloudflare Tunnel Setup (Optional)
+
+Cloudflare Tunnel enables secure SSH and HTTP access to containers without exposing ports publicly.
+
+### 1. Install cloudflared
+
+```bash
+# macOS
+brew install cloudflared
+
+# Debian/Ubuntu
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+sudo apt update && sudo apt install cloudflared
+```
+
+### 2. Authenticate and Create Tunnel
+
+```bash
+cloudflared tunnel login
+cloudflared tunnel create sandboxie
+```
+
+Note the Tunnel ID from the output.
+
+### 3. Configure Tunnel
+
+Create `/etc/cloudflared/config.yml`:
+
+```yaml
+tunnel: <YOUR_TUNNEL_ID>
+credentials-file: /home/<user>/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  # Web dashboard
+  - hostname: dashboard.example.com
+    service: http://localhost:3000
+
+  # SSH and HTTP rules are dynamically added by Sandboxie
+  # Format: {username}-ssh-{domain} → ssh://127.0.0.1:{port}
+  # Format: {username}-web-{domain} → http://127.0.0.1:{port}
+
+  # Catch-all (required)
+  - service: http_status:404
+```
+
+**Note**: Use `127.0.0.1` instead of `localhost` for SSH services. Podman rootless binds to IPv4 only, and `localhost` may resolve to IPv6.
+
+### 4. Set Up DNS Records
+
+For each subdomain pattern, create a CNAME record pointing to your tunnel:
+
+| Type | Name | Target | Proxy |
+|------|------|--------|-------|
+| CNAME | `*-ssh-sandbox` | `<TUNNEL_ID>.cfargotunnel.com` | Proxied |
+| CNAME | `*-web-sandbox` | `<TUNNEL_ID>.cfargotunnel.com` | Proxied |
+| CNAME | `dashboard` | `<TUNNEL_ID>.cfargotunnel.com` | Proxied |
+
+**Cloudflare Free Tier Limitation**: SSL certificates only cover one level of subdomains (`*.example.com`), not nested (`*.sandbox.example.com`). Use dash notation: `alice-ssh-sandbox.example.com`.
+
+### 5. Start Tunnel Service
+
+```bash
+# Run as daemon
+sudo cloudflared service install
+sudo systemctl start cloudflared
+
+# Or run manually
+cloudflared tunnel run sandboxie
+```
+
+### 6. Update Environment Variables
+
+```env
+CF_API_TOKEN=your-api-token-with-dns-edit
+CF_ZONE_ID=your-zone-id
+CF_DOMAIN=sandbox.example.com
+CF_TUNNEL_ID=your-tunnel-id
+```
+
+## Usage
+
+### Admin Dashboard
+
+1. Navigate to `http://localhost:3000` (or your configured domain)
+2. Log in with your admin password
+3. Create sessions using the "New Session" form:
+   - **Username**: 2-30 characters, alphanumeric only
+   - **Password**: SSH password for the container
+   - **Memory Limit**: 256-512 MB (if cgroup memory controller available)
+   - **CPU Limit**: 0.5-2 cores
+   - **TTL**: Session lifetime in hours (0 = unlimited)
+
+### Web Terminal
+
+1. Click "Terminal" button on a session in the dashboard
+2. Enter the session's SSH password
+3. Use the terminal directly in your browser
+4. Mobile users have access to modifier keys (Ctrl, Alt, Shift) via toolbar
+
+### SSH Access via Cloudflare Tunnel
+
+Add to `~/.ssh/config`:
+
+```ssh-config
+Host *-ssh-sandbox.example.com
+    ProxyCommand cloudflared access ssh --hostname %h
+    User <username>
+```
+
+Connect:
+
+```bash
+ssh alice-ssh-sandbox.example.com
+# Password: <session password>
+```
+
+### HTTP Access via Cloudflare Tunnel
+
+Start a web server inside the container:
+
+```bash
+# Python
+python3 -m http.server 80
+
+# Node.js (http-server)
+npx http-server -p 80
+
+# Node.js (serve)
+npx serve -l 80
+```
+
+Access from browser: `https://alice-web-sandbox.example.com`
+
+**Port Mapping**:
+- SSH: `alice-ssh-sandbox.example.com` → Host `:2200-2299` → Container `:22`
+- HTTP: `alice-web-sandbox.example.com` → Host `:3200-3299` → Container `:80`
+
+## API Reference
+
+All endpoints except `/api/auth/login` and `/api/health` require `Authorization: Bearer <token>` header.
+
+### Authentication
+
+#### POST `/api/auth/login`
+
+Authenticate and receive JWT token.
+
+**Request:**
+```json
+{
+  "password": "admin-password"
+}
+```
+
+**Response (200):**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Response (401):**
+```json
+{
+  "error": "Invalid password"
+}
+```
+
+**Response (429 - Rate Limited):**
+```json
+{
+  "error": "Too many failed attempts. Try again in X minutes."
+}
+```
+
+Rate limit: 5 failed attempts triggers 15-minute IP lockout.
+
+### Health Check
+
+#### GET `/api/health`
+
+Check server status.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+### Sessions
+
+#### GET `/api/sessions`
+
+List all sessions.
+
+**Response:**
+```json
+{
+  "sessions": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "username": "alice",
+      "subdomain": "alice-sandbox.example.com",
+      "sshPort": 2200,
+      "httpPort": 3200,
+      "containerName": "sandbox-alice",
+      "memoryLimit": 256,
+      "cpuLimit": 0.5,
+      "status": "running",
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "expiresAt": null,
+      "lastAccessedAt": "2024-01-15T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+#### POST `/api/sessions`
+
+Create a new session.
+
+**Request:**
+```json
+{
+  "username": "alice",
+  "password": "ssh-password",
+  "memoryLimit": 256,
+  "cpuLimit": 0.5,
+  "ttl": 3600
+}
+```
+
+| Field | Type | Required | Constraints |
+|-------|------|----------|-------------|
+| `username` | string | Yes | 2-30 chars, alphanumeric |
+| `password` | string | Yes | SSH login password |
+| `memoryLimit` | number | No | 256-512 MB, default 256 |
+| `cpuLimit` | number | No | 0.5-2 cores, default 0.5 |
+| `ttl` | number | No | Seconds until expiry, 0 = unlimited |
+
+**Response (201):**
+```json
+{
+  "session": { /* session object */ },
+  "sshCommand": "ssh alice@alice-ssh-sandbox.example.com"
+}
+```
+
+**Response (400):**
+```json
+{
+  "error": "Username must be 2-30 alphanumeric characters"
+}
+```
+
+**Response (409):**
+```json
+{
+  "error": "Session with this username already exists"
+}
+```
+
+#### DELETE `/api/sessions/:username`
+
+Delete a session and its container.
+
+**Response (200):**
+```json
+{
+  "success": true
+}
+```
+
+**Response (404):**
+```json
+{
+  "error": "Session not found"
+}
+```
+
+#### POST `/api/sessions/:username/restart`
+
+Restart a session's container.
+
+**Response (200):**
+```json
+{
+  "success": true
+}
+```
+
+#### GET `/api/sessions/:username/stats`
+
+Get container resource usage.
+
+**Response:**
+```json
+{
+  "memoryUsage": 45.2,
+  "cpuUsage": 12.5,
+  "uptime": 3600
+}
+```
+
+| Field | Unit | Description |
+|-------|------|-------------|
+| `memoryUsage` | MB | Current memory consumption |
+| `cpuUsage` | % | CPU utilization percentage |
+| `uptime` | seconds | Container uptime |
+
+### WebSocket Terminal
+
+#### WS `/api/terminal/:username`
+
+Establish terminal connection to a session's container.
+
+**Client Messages:**
+
+```typescript
+// Authenticate and start session
+{ type: "auth", password: string, cols?: number, rows?: number }
+
+// Send input data (base64 encoded)
+{ type: "data", data: string }
+
+// Resize terminal
+{ type: "resize", cols: number, rows: number }
+
+// Keep-alive ping
+{ type: "ping" }
+```
+
+**Server Messages:**
+
+```typescript
+// Authentication successful
+{ type: "authenticated" }
+
+// Terminal output (base64 encoded)
+{ type: "data", data: string }
+
+// Error occurred
+{ type: "error", message: string }
+
+// Connection closed
+{ type: "disconnect" }
+
+// Ping response
+{ type: "pong" }
+```
+
+## Sandbox Environment
+
+Each session runs in an isolated Ubuntu 22.04 container with:
+
+### Pre-installed Software
+
+| Category | Packages |
+|----------|----------|
+| Shell | zsh (with completion, history, aliases) |
+| Editors | vim, nano |
+| Tools | git, curl, wget, tmux, gh (GitHub CLI) |
+| Languages | Node.js 24.x, Python 3, Bun |
+| System | sudo (apt/apt-get only), openssh-server |
+
+### User Configuration
+
+- **Shell**: zsh with colored prompt, completion, and useful aliases
+- **Sudo**: Limited to `apt` and `apt-get` only (no other elevated commands)
+- **Home**: `/home/<username>` with npm/pip user-install paths configured
+
+### Security Restrictions
+
+- Root login disabled via SSH
+- No host filesystem access
+- Network isolated (Podman default bridge)
+- Resource limits enforced (CPU always, memory if cgroup available)
+
+## Production Deployment
+
+### Build and Deploy
 
 ```bash
 bun run deploy
 ```
 
-`scripts/deploy.sh`가 수행하는 작업:
+This script (`scripts/deploy.sh`):
 
-1. 프론트엔드 빌드
-2. 백엔드를 단일 바이너리로 컴파일 (`bun build --compile`)
-3. 정적 파일 복사
-4. systemd 서비스 재시작
+1. Builds frontend to `frontend/build/`
+2. Compiles backend to single binary (`bun build --compile`)
+3. Copies binary and static files to `/opt/sandboxie/`
+4. Restarts systemd service
 
-### systemd 서비스
+**Note**: Do NOT use `--production` flag with `bun build --compile`. It causes Elysia runtime issues due to minification bugs.
+
+### systemd Service
+
+Create `~/.config/systemd/user/sandboxie.service`:
 
 ```ini
-# ~/.config/systemd/user/sandboxie.service
 [Unit]
 Description=Sandboxie Backend Server
 After=network-online.target
@@ -197,218 +692,242 @@ RestartSec=5
 WantedBy=default.target
 ```
 
+Enable and start:
+
 ```bash
-# 서비스 등록 및 시작
+# Enable lingering (keeps service running after logout)
+loginctl enable-linger $(whoami)
+
+# Reload and start
 systemctl --user daemon-reload
 systemctl --user enable --now sandboxie
 
-# linger 설정 (로그인 없이도 서비스 유지)
-loginctl enable-linger $(whoami)
-
-# 상태 확인
+# Check status
 systemctl --user status sandboxie
+
+# View logs
+journalctl --user -u sandboxie -f
 ```
 
-## 접속 방법
+### Environment File
 
-Cloudflare Tunnel을 통해 SSH 및 HTTP로 접속한다. 클라이언트에 `cloudflared`가 필요하다.
+Create `/opt/sandboxie/.env` with production values:
 
-### 1. SSH 접속
-
-`~/.ssh/config`에 아래 내용을 추가:
-
+```env
+DATABASE_URL=postgresql://sandboxie:password@localhost:5432/sandboxie
+ADMIN_PASSWORD_HASH=$argon2id$v=19$m=65536,t=2,p=1$...
+JWT_SECRET=your-very-long-secret-key-at-least-32-chars
+CF_API_TOKEN=your-cloudflare-api-token
+CF_ZONE_ID=your-zone-id
+CF_DOMAIN=sandbox.example.com
+CF_TUNNEL_ID=your-tunnel-id
+PORT=3000
+HOST=0.0.0.0
 ```
-Host *-ssh-sandbox.qucord.com
-    ProxyCommand cloudflared access ssh --hostname %h
-```
 
-접속:
+## Database Schema
+
+### Sessions Table
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PK, auto-generated | Unique session identifier |
+| `username` | varchar(30) | UNIQUE, NOT NULL | User identifier |
+| `password` | varchar(255) | NOT NULL | Argon2id hashed SSH password |
+| `subdomain` | varchar(255) | UNIQUE | Full subdomain (username-domain) |
+| `sshPort` | integer | UNIQUE | Host port mapped to container :22 |
+| `httpPort` | integer | UNIQUE | Host port mapped to container :80 |
+| `containerName` | varchar(100) | UNIQUE | Podman container name |
+| `memoryLimit` | integer | DEFAULT 256 | Memory limit in MB |
+| `cpuLimit` | real | DEFAULT 0.5 | CPU cores limit |
+| `status` | enum | NOT NULL | 'running', 'stopped', 'paused' |
+| `createdAt` | timestamptz | DEFAULT now() | Creation timestamp |
+| `expiresAt` | timestamptz | NULLABLE | TTL expiration timestamp |
+| `lastAccessedAt` | timestamptz | | Last activity timestamp |
+
+## Testing
+
+### E2E Tests
 
 ```bash
-ssh alice@alice-ssh-sandbox.qucord.com
-```
+# Start server first
+bun run start &
 
-### 2. HTTP 접속
-
-각 세션은 SSH 포트 외에 HTTP 포트도 노출됩니다.
-
-컨테이너 내부에서 웹 서버 실행:
-
-```bash
-# 예시: Python HTTP 서버 (1024 이상 포트 권장)
-alice@container:~$ python3 -m http.server 8080
-
-# 또는 Node.js
-alice@container:~$ npx http-server -p 8080
-```
-
-외부에서 접속:
-
-```
-https://alice-web-sandbox.qucord.com
-```
-
-**포트 매핑:**
-- SSH: `alice-ssh-sandbox.qucord.com` → 호스트 `2200-2299` → 컨테이너 `22`
-- HTTP: `alice-web-sandbox.qucord.com` → 호스트 `3200-3299` → 컨테이너 `80`
-
-**참고**:
-- Cloudflare 무료 플랜은 1단계 서브도메인만 지원하므로 `alice-ssh-sandbox.qucord.com` 형식을 사용합니다.
-- 웹 서버 호스팅 상세 가이드: **[HTTP_GUIDE.md](HTTP_GUIDE.md)**
-
-### cloudflared 설치
-
-- macOS: `brew install cloudflared`
-- Linux: [설치 가이드](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/)
-- Windows: [다운로드](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/)
-
-## API
-
-모든 API는 `Authorization: Bearer {token}` 헤더가 필요하다 (로그인, health check 제외).
-
-### 인증
-
-```
-POST /api/auth/login
-Body: { "password": "<admin_password>" }
-Response: { "token": "..." }
-```
-
-### Health Check
-
-```
-GET /api/health
-Response: { "status": "ok", "timestamp": "..." }
-```
-
-### 세션 관리
-
-```
-GET    /api/sessions                      # 세션 목록
-POST   /api/sessions                      # 세션 생성
-DELETE /api/sessions/:username            # 세션 삭제
-POST   /api/sessions/:username/restart    # 세션 재시작
-GET    /api/sessions/:username/stats      # 리소스 사용량 조회
-```
-
-#### 세션 생성 요청
-
-```json
-{
-  "username": "alice",
-  "password": "ssh-password",
-  "memoryLimit": 256,
-  "cpuLimit": 0.5,
-  "ttl": 3600
-}
-```
-
-- `username`: 영문/숫자만, 2-30자
-- `memoryLimit`: MB 단위 (기본값 256, 최대 512)
-- `cpuLimit`: 코어 수 (기본값 0.5, 최대 2)
-- `ttl`: 초 단위 (선택, 미지정 시 무제한)
-
-#### 세션 생성 시 동작 흐름
-
-1. SSH 포트 할당 (2200-2299 범위)
-2. Podman 컨테이너 생성 및 시작
-3. Cloudflare DNS CNAME 레코드 생성 (→ Tunnel)
-4. Cloudflare Tunnel 인그레스 규칙 추가
-5. DB에 세션 정보 저장
-
-#### 세션 삭제 시 정리 흐름
-
-1. Cloudflare Tunnel 인그레스 규칙 제거
-2. Cloudflare DNS 레코드 삭제
-3. Podman 컨테이너 제거
-4. DB에서 세션 삭제
-
-## 샌드박스 환경
-
-각 세션은 Ubuntu 22.04 기반 Podman 컨테이너로 생성된다.
-
-**사전 설치 도구:**
-- Shell: zsh
-- 개발: git, curl, wget, vim, nano
-- 언어: Node.js 20.x, Python3, Bun
-
-**권한:**
-- sudo로 `apt`/`apt-get`만 사용 가능 (패키지 설치)
-- root 로그인 비활성화
-- 호스트 시스템 접근 차단
-
-**리소스 제한:**
-- 메모리: cgroup memory 컨트롤러 지원 시 적용 (RPi5는 미지원)
-- CPU: `--cpus` 플래그로 제한
-
-## 테스트
-
-Playwright 기반 E2E 테스트를 포함한다.
-
-```bash
-# E2E 테스트 실행 (서버가 실행 중이어야 함)
+# Run Playwright tests
 bun test
 ```
 
-테스트 항목:
-- Health check API
-- 정적 파일 서빙 (HTML, JS, CSS, SPA 폴백)
-- 로그인 폼 렌더링 및 인증 실패
-- 인증 플로우 (로그인 → 대시보드 → 로그아웃)
-- 세션 관리 UI (생성 폼 토글)
-- API 엔드포인트 (인증, 세션 목록)
+Test coverage includes:
+- Health check endpoint
+- Static file serving (HTML, JS, CSS)
+- SPA fallback routing
+- Login form rendering
+- Authentication flow
+- Dashboard functionality
+- Session creation UI
+- API endpoint authentication
 
-## 스크립트 목록
+### Manual Testing
 
 ```bash
-bun run dev:backend    # 백엔드 개발 모드 (watch)
-bun run dev:frontend   # 프론트엔드 개발 서버
-bun run build          # 프론트엔드 빌드
-bun run start          # 프로덕션 서버 실행
-bun run db:up          # PostgreSQL 컨테이너 시작
-bun run db:down        # PostgreSQL 컨테이너 중지
-bun run db:generate    # Drizzle 마이그레이션 생성
-bun run db:migrate     # 마이그레이션 실행
-bun run deploy         # 프로덕션 배포 (/opt/sandboxie/)
-bun test               # E2E 테스트 실행
+# Test health endpoint
+curl http://localhost:3000/api/health
+
+# Test authentication
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"password": "your-password"}'
+
+# Test session creation (with token)
+curl -X POST http://localhost:3000/api/sessions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"username": "testuser", "password": "testpass"}'
 ```
 
-## 데이터 모델
+## NPM Scripts Reference
 
-### Session
+| Script | Description |
+|--------|-------------|
+| `bun run dev:backend` | Start backend in development mode (hot reload) |
+| `bun run dev:frontend` | Start Vite dev server for frontend |
+| `bun run build` | Build frontend for production |
+| `bun run start` | Run production backend server |
+| `bun run db:up` | Start PostgreSQL container |
+| `bun run db:down` | Stop PostgreSQL container |
+| `bun run db:generate` | Generate Drizzle migrations |
+| `bun run db:migrate` | Apply database migrations |
+| `bun run deploy` | Build and deploy to /opt/sandboxie/ |
+| `bun test` | Run Playwright E2E tests |
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| id | UUID | PK, 자동 생성 |
-| username | varchar(30) | 영문/숫자, unique |
-| password | varchar(255) | Argon2id 해시 |
-| subdomain | varchar(255) | `{username}-{CF_DOMAIN}`, unique |
-| sshPort | integer | 2200-2299, unique |
-| httpPort | integer | 3200-3299, unique |
-| containerName | varchar(100) | `sandbox-{username}`, unique |
-| memoryLimit | integer | MB (기본값 256) |
-| cpuLimit | real | 코어 수 (기본값 0.5) |
-| status | enum | `running` / `stopped` / `paused` |
-| createdAt | timestamp | 생성 시각 |
-| expiresAt | timestamp | TTL 만료 시각 (nullable) |
-| lastAccessedAt | timestamp | 최근 접근 시각 |
+## Known Limitations
 
-## 보안
+### cgroup v2 Memory Controller
 
-### 인증 보안
-- **관리자 인증**: Argon2id 해시로 비밀번호 보호
-- **Rate Limiting**: 5회 실패 시 15분간 IP 차단
-- **JWT 토큰**: 24시간 유효 기간, Bearer 인증
+On some systems (notably Raspberry Pi 5 with default kernel), the cgroup v2 memory controller is not enabled. The application automatically detects this by checking `/sys/fs/cgroup/cgroup.controllers` and disables memory limiting if unavailable.
 
-### 세션 보안
-- **비밀번호 해싱**: SSH 비밀번호는 Argon2id로 저장
-- **컨테이너 격리**: Podman rootless로 호스트 시스템 보호
-- **리소스 제한**: CPU/메모리 제한으로 DoS 방지
+**Workaround**: If you need memory limits, enable the memory controller in your kernel boot parameters:
+```
+cgroup_enable=memory cgroup_memory=1
+```
 
-## 알려진 제한사항
+### Podman Restart Port Conflict
 
-- **cgroup v2 memory**: RPi5의 기본 커널은 memory 컨트롤러가 비활성화되어 있어, `--memory` 플래그 사용 시 컨테이너가 크래시한다. 런타임에 `/sys/fs/cgroup/cgroup.controllers`를 확인하여 자동으로 감지한다.
-- **Podman restart**: 포트 충돌 문제로 `podman restart` 대신 stop → 1초 대기 → start 패턴을 사용한다.
-- **TTL 자동 정리**: DB에 `expiresAt`이 저장되지만, 만료 시 자동 종료하는 크론잡은 아직 미구현이다.
-- **Cloudflare DNS**: `CF_API_TOKEN`과 `CF_ZONE_ID`가 설정되지 않으면 DNS 등록을 건너뛴다. DNS/터널 실패는 세션 생성을 차단하지 않는다.
-- **Bun 컴파일**: `bun build --compile --production` 사용 시 Elysia 런타임이 깨진다. `--production` 플래그 없이 컴파일해야 한다.
+`podman restart` sometimes fails with "port already in use" errors. The application uses a stop → 1-second sleep → start pattern as a workaround.
+
+### TTL Auto-Expiration
+
+The `expiresAt` field is stored in the database, but automatic session cleanup via cron job is not yet implemented. Sessions with expired TTL must be manually deleted.
+
+### Cloudflare DNS Graceful Degradation
+
+If Cloudflare credentials are not configured or API calls fail, the application logs warnings but continues session creation. Sessions will be accessible via direct host ports but not via Cloudflare Tunnel subdomains.
+
+### Bun Compilation
+
+Using `bun build --compile --production` breaks Elysia at runtime due to minification bugs. Always compile without the `--production` flag:
+```bash
+bun build --compile --target=bun backend/src/index.ts --outfile sandboxie
+```
+
+## Security Considerations
+
+### Authentication Security
+
+- **Password Storage**: Admin and session passwords use Argon2id hashing (memory-hard, resistant to GPU attacks)
+- **Rate Limiting**: 5 failed login attempts trigger 15-minute IP lockout
+- **IP Detection**: Supports Cloudflare headers (CF-Connecting-IP, X-Forwarded-For)
+- **JWT Tokens**: 24-hour expiry, signed with configurable secret
+
+### Container Isolation
+
+- **Rootless Podman**: Containers run without root privileges on host
+- **Limited Sudo**: Users can only run apt/apt-get with sudo
+- **No Host Access**: Containers have no access to host filesystem
+- **Network Isolation**: Default Podman bridge network (containers cannot access each other)
+- **Resource Limits**: CPU limits always enforced, memory limits when available
+
+### Input Validation
+
+- Username: 2-30 characters, alphanumeric only (prevents injection)
+- Memory/CPU limits: Enforced ranges (256-512 MB, 0.5-2 cores)
+- All API inputs validated before processing
+
+## Troubleshooting
+
+### Container Won't Start
+
+```bash
+# Check Podman logs
+podman logs sandbox-<username>
+
+# Check if image exists
+podman images | grep sandboxie
+
+# Rebuild image
+podman build -t localhost/sandboxie:latest container/
+```
+
+### SSH Connection Refused
+
+```bash
+# Check if container is running
+podman ps | grep sandbox-<username>
+
+# Check SSH port mapping
+podman port sandbox-<username>
+
+# Test direct connection
+ssh -p <port> <username>@localhost
+```
+
+### Cloudflare Tunnel Not Working
+
+```bash
+# Check tunnel status
+cloudflared tunnel info <tunnel-id>
+
+# Check ingress rules
+cat /etc/cloudflared/config.yml
+
+# Restart cloudflared
+sudo systemctl restart cloudflared
+
+# View logs
+sudo journalctl -u cloudflared -f
+```
+
+### Database Connection Issues
+
+```bash
+# Check PostgreSQL container
+podman ps | grep postgres
+
+# View PostgreSQL logs
+podman logs sandboxie-postgres
+
+# Test connection
+psql $DATABASE_URL -c "SELECT 1"
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Run tests (`bun test`)
+5. Commit with conventional commit messages (`git commit -m 'feat: add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Acknowledgments
+
+- [Elysia.js](https://elysiajs.com) - Fast and elegant HTTP framework
+- [SolidJS](https://www.solidjs.com) - Reactive UI framework
+- [xterm.js](https://xtermjs.org) - Terminal emulation
+- [Podman](https://podman.io) - Daemonless container engine
+- [Cloudflare](https://cloudflare.com) - Tunnel and DNS services
