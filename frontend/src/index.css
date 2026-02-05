@@ -41,3 +41,31 @@
     padding-top: env(safe-area-inset-top);
   }
 }
+
+/* xterm.js mobile touch optimizations */
+.xterm {
+  touch-action: pan-y pinch-zoom;
+}
+
+.xterm-viewport {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Better selection visibility on mobile */
+.xterm .xterm-selection {
+  opacity: 0.5;
+}
+
+/* Improve touch target for xterm */
+@media (max-width: 768px) {
+  .xterm .xterm-screen {
+    cursor: text;
+  }
+
+  /* Larger cursor for touch */
+  .xterm .xterm-cursor-block {
+    outline: 2px solid #7aa2f7;
+    outline-offset: -1px;
+  }
+}

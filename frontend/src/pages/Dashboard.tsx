@@ -163,10 +163,9 @@ export default function Dashboard(props: Props) {
               <code class="bg-muted px-1.5 py-0.5 rounded">https://user-web-{getDomain()}</code>로 외부 접근 가능합니다.
             </p>
             <div class="space-y-1">
-              <p class="font-medium">⚠️ 중요: 포트 80으로 실행해야 합니다</p>
+              <p class="font-medium">✅ 포트 8080에서 서버 실행</p>
               <p class="text-muted-foreground text-xs">
-                • <strong>1024 이상 포트</strong>로 실행 후 <code class="bg-muted px-1 py-0.5 rounded">socat</code>으로 포워딩 권장<br/>
-                • 예시: <code class="bg-muted px-1 py-0.5 rounded">python3 -m http.server 8080</code> → <code class="bg-muted px-1 py-0.5 rounded">socat TCP-LISTEN:80,fork,reuseaddr TCP:localhost:8080</code>
+                예시: <code class="bg-muted px-1 py-0.5 rounded">python3 -m http.server 8080</code> 또는 <code class="bg-muted px-1 py-0.5 rounded">bun --port 8080 index.ts</code>
               </p>
             </div>
           </div>
@@ -216,7 +215,7 @@ export default function Dashboard(props: Props) {
                 value={newMemory()}
                 onInput={(e) => setNewMemory(Number(e.currentTarget.value))}
                 min={64}
-                max={512}
+                max={1024}
                 class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>

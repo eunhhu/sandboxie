@@ -31,6 +31,16 @@ export const sessionRoutes = new Elysia({ prefix: '/api/sessions' })
       return { error: 'Username must be 2-30 characters' };
     }
 
+    if (memoryLimit !== undefined && (memoryLimit < 64 || memoryLimit > 1024)) {
+      set.status = 400;
+      return { error: 'Memory limit must be between 64MB and 1024MB' };
+    }
+
+    if (cpuLimit !== undefined && (cpuLimit < 0.1 || cpuLimit > 2)) {
+      set.status = 400;
+      return { error: 'CPU limit must be between 0.1 and 2 cores' };
+    }
+
     try {
       const session = await sessionService.createSession({
         username,

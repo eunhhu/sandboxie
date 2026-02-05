@@ -11,6 +11,7 @@ const THEME = {
   cursor: '#c0caf5',
   cursorAccent: '#1a1b26',
   selectionBackground: '#33467c',
+  selectionForeground: '#c0caf5',
   black: '#15161e',
   red: '#f7768e',
   green: '#9ece6a',
@@ -32,6 +33,7 @@ const THEME = {
 export function useTerminal(username: string) {
   const [status, setStatus] = createSignal<TerminalStatus>('disconnected');
   const [errorMessage, setErrorMessage] = createSignal('');
+  const [hasSelection, setHasSelection] = createSignal(false);
 
   let terminal: Terminal | null = null;
   let fitAddon: FitAddon | null = null;
@@ -40,18 +42,29 @@ export function useTerminal(username: string) {
   let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
   let resizeObserver: ResizeObserver | null = null;
 
-  const isMobile = () => window.innerWidth < 768;
+  const isMobile = () => window.innerWidth < 768 || 'ontouchstart' in window;
 
   function createTerminal(container: HTMLElement) {
+    const mobile = isMobile();
+
     terminal = new Terminal({
       theme: THEME,
-      fontSize: isMobile() ? 12 : 14,
+      fontSize: mobile ? 13 : 14,
       fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', Menlo, Monaco, monospace",
       cursorBlink: true,
       scrollback: 5000,
       allowProposedApi: true,
       scrollOnUserInput: true,
-      smoothScrollDuration: 0, // Disable smooth scroll for better mobile performance
+      smoothScrollDuration: 0,
+      // Mobile touch optimizations
+      rightClickSelectsWord: mobile,
+      altClickMovesCursor: !mobile,
+      // Better mobile scrolling
+      fastScrollModifier: 'alt',
+      fastScrollSensitivity: 5,
+      scrollSensitivity: mobile ? 3 : 1,
+      // Selection options for mobile
+      overviewRuler: {},
     });
 
     fitAddon = new FitAddon();
@@ -59,6 +72,20 @@ export function useTerminal(username: string) {
     terminal.loadAddon(new WebLinksAddon());
 
     terminal.open(container);
+
+    // Apply mobile-specific styles to terminal element
+    if (mobile) {
+      const termElement = container.querySelector('.xterm') as HTMLElement;
+      if (termElement) {
+        termElement.style.touchAction = 'pan-y';
+      }
+      const viewportElement = container.querySelector('.xterm-viewport') as HTMLElement;
+      if (viewportElement) {
+        viewportElement.style.overscrollBehavior = 'contain';
+        viewportElement.style.webkitOverflowScrolling = 'touch';
+      }
+    }
+
     fitAddon.fit();
 
     resizeObserver = new ResizeObserver(() => {
@@ -84,7 +111,10 @@ export function useTerminal(username: string) {
       }
     });
 
-    // mobile viewport - handled by parent component now
+    // Track selection state for mobile copy button
+    terminal.onSelectionChange(() => {
+      setHasSelection(terminal?.hasSelection() ?? false);
+    });
 
     return terminal;
   }
@@ -184,6 +214,52 @@ export function useTerminal(username: string) {
     fitAddon?.fit();
   }
 
+  function getSelection(): string {
+    return terminal?.getSelection() ?? '';
+  }
+
+  function clearSelection() {
+    terminal?.clearSelection();
+    setHasSelection(false);
+  }
+
+  async function copySelection(): Promise<boolean> {
+    const text = getSelection();
+    if (!text) return false;
+    try {
+      await navigator.clipboard.writeText(text);
+      clearSelection();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function paste(): Promise<boolean> {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && terminal) {
+        terminal.paste(text);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  function selectAll() {
+    terminal?.selectAll();
+  }
+
+  function scrollToBottom() {
+    terminal?.scrollToBottom();
+  }
+
+  function scrollToTop() {
+    terminal?.scrollToTop();
+  }
+
   function dispose() {
     disconnect();
     if (resizeTimeout) clearTimeout(resizeTimeout);
@@ -198,12 +274,20 @@ export function useTerminal(username: string) {
   return {
     status,
     errorMessage,
+    hasSelection,
     terminalInstance: () => terminal,
     fitAddon: () => fitAddon,
     createTerminal,
     connect,
     disconnect,
     fit,
+    getSelection,
+    clearSelection,
+    copySelection,
+    paste,
+    selectAll,
+    scrollToBottom,
+    scrollToTop,
     dispose,
   };
 }
