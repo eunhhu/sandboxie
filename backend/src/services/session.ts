@@ -14,6 +14,7 @@ export async function listSessions() {
     username: sessions.username,
     subdomain: sessions.subdomain,
     sshPort: sessions.sshPort,
+    httpPort: sessions.httpPort,
     containerName: sessions.containerName,
     memoryLimit: sessions.memoryLimit,
     cpuLimit: sessions.cpuLimit,
@@ -40,6 +41,7 @@ export async function createSession(opts: {
   ttl?: number;
 }): Promise<Session> {
   const sshPort = await allocatePort();
+  const httpPort = sshPort + 1000; // SSH: 2200-2299, HTTP: 3200-3299
   const containerName = `sandbox-${opts.username}`;
   const subdomain = config.cfDomain
     ? `${opts.username}-${config.cfDomain}`
@@ -51,18 +53,21 @@ export async function createSession(opts: {
     username: opts.username,
     password: opts.password,
     sshPort,
+    httpPort,
     memoryLimit: opts.memoryLimit ?? 256,
     cpuLimit: opts.cpuLimit ?? 0.5,
   });
 
   try {
-    await cloudflare.createDnsRecord(opts.username);
+    await cloudflare.createDnsRecord(opts.username, 'ssh');
+    await cloudflare.createDnsRecord(opts.username, 'web');
   } catch (err) {
     console.warn(`DNS record creation failed for ${opts.username}:`, err instanceof Error ? err.message : err);
   }
 
   try {
     await tunnel.addSshIngress(opts.username, sshPort);
+    await tunnel.addHttpIngress(opts.username, httpPort);
   } catch (err) {
     console.warn(`Tunnel ingress creation failed for ${opts.username}:`, err instanceof Error ? err.message : err);
   }
@@ -78,6 +83,7 @@ export async function createSession(opts: {
       password: hashedPassword,
       subdomain,
       sshPort,
+      httpPort,
       containerName,
       memoryLimit: opts.memoryLimit ?? 256,
       cpuLimit: opts.cpuLimit ?? 0.5,
@@ -99,14 +105,19 @@ export async function deleteSession(username: string): Promise<void> {
 
   try {
     await tunnel.removeSshIngress(username);
+    await tunnel.removeHttpIngress(username);
   } catch (err) {
     console.warn(`Tunnel ingress removal failed for ${username}:`, err instanceof Error ? err.message : err);
   }
 
   try {
-    const recordId = await cloudflare.findDnsRecord(username);
-    if (recordId) {
-      await cloudflare.deleteDnsRecord(recordId);
+    const sshRecordId = await cloudflare.findDnsRecord(username, 'ssh');
+    if (sshRecordId) {
+      await cloudflare.deleteDnsRecord(sshRecordId);
+    }
+    const webRecordId = await cloudflare.findDnsRecord(username, 'web');
+    if (webRecordId) {
+      await cloudflare.deleteDnsRecord(webRecordId);
     }
   } catch (err) {
     console.warn(`DNS record deletion failed for ${username}:`, err instanceof Error ? err.message : err);

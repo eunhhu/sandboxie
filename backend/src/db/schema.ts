@@ -8,6 +8,7 @@ export const sessions = pgTable('sessions', {
   password: varchar('password', { length: 255 }).notNull(),
   subdomain: varchar('subdomain', { length: 255 }).notNull().unique(),
   sshPort: integer('ssh_port').notNull().unique(),
+  httpPort: integer('http_port').notNull().unique(),
   containerName: varchar('container_name', { length: 100 }).notNull().unique(),
   memoryLimit: integer('memory_limit').notNull().default(256),
   cpuLimit: real('cpu_limit').notNull().default(0.5),

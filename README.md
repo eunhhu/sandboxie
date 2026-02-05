@@ -101,7 +101,7 @@ cp .env.example .env
 | 변수 | 필수 | 설명 | 기본값 |
 |------|:---:|------|--------|
 | `DATABASE_URL` | O | PostgreSQL 연결 문자열 | - |
-| `ADMIN_PASSWORD` | O | 대시보드 관리자 비밀번호 | - |
+| `ADMIN_PASSWORD_HASH` | O | 대시보드 관리자 비밀번호 해시 (Argon2id) | - |
 | `JWT_SECRET` | O | JWT 서명 시크릿 | - |
 | `CF_API_TOKEN` | | Cloudflare API 토큰 | (없으면 DNS 생략) |
 | `CF_ZONE_ID` | | Cloudflare Zone ID | (없으면 DNS 생략) |
@@ -112,6 +112,18 @@ cp .env.example .env
 | `SANDBOX_IMAGE` | | 컨테이너 이미지 | `localhost/sandboxie:latest` |
 | `SSH_PORT_START` | | SSH 포트 범위 시작 | `2200` |
 | `SSH_PORT_END` | | SSH 포트 범위 끝 | `2299` |
+
+### 관리자 비밀번호 해시 생성
+
+보안을 위해 관리자 비밀번호는 Argon2id로 해싱된 값을 사용합니다.
+
+```bash
+# 비밀번호 해시 생성
+bun run scripts/hash-password.ts your-secure-password
+
+# 출력된 해시값을 .env 파일에 복사
+ADMIN_PASSWORD_HASH=$argon2id$v=19$m=65536,t=2,p=1$...
+```
 
 ### 3. PostgreSQL 실행
 
@@ -197,24 +209,52 @@ loginctl enable-linger $(whoami)
 systemctl --user status sandboxie
 ```
 
-## SSH 접속
+## 접속 방법
 
-Cloudflare Tunnel을 통해 SSH 접속한다. 클라이언트에 `cloudflared`가 필요하다.
+Cloudflare Tunnel을 통해 SSH 및 HTTP로 접속한다. 클라이언트에 `cloudflared`가 필요하다.
 
-### 1. 클라이언트 SSH 설정
+### 1. SSH 접속
 
 `~/.ssh/config`에 아래 내용을 추가:
 
 ```
-Host *-sandbox.yourdomain.com
+Host *-ssh-sandbox.qucord.com
     ProxyCommand cloudflared access ssh --hostname %h
 ```
 
-### 2. 접속
+접속:
 
 ```bash
-ssh alice@alice-sandbox.yourdomain.com
+ssh alice@alice-ssh-sandbox.qucord.com
 ```
+
+### 2. HTTP 접속
+
+각 세션은 SSH 포트 외에 HTTP 포트도 노출됩니다.
+
+컨테이너 내부에서 웹 서버 실행:
+
+```bash
+# 예시: Python HTTP 서버 (1024 이상 포트 권장)
+alice@container:~$ python3 -m http.server 8080
+
+# 또는 Node.js
+alice@container:~$ npx http-server -p 8080
+```
+
+외부에서 접속:
+
+```
+https://alice-web-sandbox.qucord.com
+```
+
+**포트 매핑:**
+- SSH: `alice-ssh-sandbox.qucord.com` → 호스트 `2200-2299` → 컨테이너 `22`
+- HTTP: `alice-web-sandbox.qucord.com` → 호스트 `3200-3299` → 컨테이너 `80`
+
+**참고**:
+- Cloudflare 무료 플랜은 1단계 서브도메인만 지원하므로 `alice-ssh-sandbox.qucord.com` 형식을 사용합니다.
+- 웹 서버 호스팅 상세 가이드: **[HTTP_GUIDE.md](HTTP_GUIDE.md)**
 
 ### cloudflared 설치
 
@@ -341,9 +381,10 @@ bun test               # E2E 테스트 실행
 |------|------|------|
 | id | UUID | PK, 자동 생성 |
 | username | varchar(30) | 영문/숫자, unique |
-| password | varchar(255) | bcrypt 해시 |
+| password | varchar(255) | Argon2id 해시 |
 | subdomain | varchar(255) | `{username}-{CF_DOMAIN}`, unique |
 | sshPort | integer | 2200-2299, unique |
+| httpPort | integer | 3200-3299, unique |
 | containerName | varchar(100) | `sandbox-{username}`, unique |
 | memoryLimit | integer | MB (기본값 256) |
 | cpuLimit | real | 코어 수 (기본값 0.5) |
@@ -351,6 +392,18 @@ bun test               # E2E 테스트 실행
 | createdAt | timestamp | 생성 시각 |
 | expiresAt | timestamp | TTL 만료 시각 (nullable) |
 | lastAccessedAt | timestamp | 최근 접근 시각 |
+
+## 보안
+
+### 인증 보안
+- **관리자 인증**: Argon2id 해시로 비밀번호 보호
+- **Rate Limiting**: 5회 실패 시 15분간 IP 차단
+- **JWT 토큰**: 24시간 유효 기간, Bearer 인증
+
+### 세션 보안
+- **비밀번호 해싱**: SSH 비밀번호는 Argon2id로 저장
+- **컨테이너 격리**: Podman rootless로 호스트 시스템 보호
+- **리소스 제한**: CPU/메모리 제한으로 DoS 방지
 
 ## 알려진 제한사항
 

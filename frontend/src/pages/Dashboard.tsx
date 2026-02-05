@@ -95,10 +95,13 @@ export default function Dashboard(props: Props) {
 
   const getDomain = () => {
     const s = sessions();
-    if (s.length === 0) return null;
-    const parts = s[0].subdomain.split('-');
-    parts.shift();
-    return parts.join('-');
+    if (s.length === 0) return 'sandbox.yourdomain.com';
+    // subdomain 형식: username-sandbox.qucord.com
+    // username 부분 제거하고 domain만 추출
+    const subdomain = s[0].subdomain;
+    const firstDash = subdomain.indexOf('-');
+    if (firstDash === -1) return subdomain;
+    return subdomain.substring(firstDash + 1);
   };
 
   const statusColor = (status: string) => {
@@ -145,14 +148,28 @@ export default function Dashboard(props: Props) {
           <p class="text-sm text-muted-foreground mb-3">
             아래 내용을 <code class="bg-muted px-1.5 py-0.5 rounded">~/.ssh/config</code> 파일에 추가하면
             {getDomain()
-              ? <><code class="bg-muted px-1.5 py-0.5 rounded">ssh user@user-{getDomain()}</code>으로 간단히 접속할 수 있습니다.</>
+              ? <><code class="bg-muted px-1.5 py-0.5 rounded">ssh user@user-ssh-{getDomain()}</code>으로 간단히 접속할 수 있습니다.</>
               : <>SSH 접속 시 ProxyCommand가 자동으로 적용됩니다.</>
             }
           </p>
           <pre class="bg-muted p-4 rounded-md text-sm overflow-x-auto"><code>{getDomain()
-            ? `Host *-${getDomain()}\n    ProxyCommand cloudflared access ssh --hostname %h\n`
-            : `Host *-your.domain.com\n    ProxyCommand cloudflared access ssh --hostname %h\n`
+            ? `Host *-ssh-${getDomain()}\n    ProxyCommand cloudflared access ssh --hostname %h\n`
+            : `Host *-ssh-your.domain.com\n    ProxyCommand cloudflared access ssh --hostname %h\n`
           }</code></pre>
+          <div class="mt-4 p-4 bg-muted/30 rounded-md text-sm space-y-2">
+            <p class="font-semibold">💡 Web 접속 가이드</p>
+            <p class="text-muted-foreground">
+              컨테이너 내부에서 웹 서버를 실행하면{' '}
+              <code class="bg-muted px-1.5 py-0.5 rounded">https://user-web-{getDomain()}</code>로 외부 접근 가능합니다.
+            </p>
+            <div class="space-y-1">
+              <p class="font-medium">⚠️ 중요: 포트 80으로 실행해야 합니다</p>
+              <p class="text-muted-foreground text-xs">
+                • <strong>1024 이상 포트</strong>로 실행 후 <code class="bg-muted px-1 py-0.5 rounded">socat</code>으로 포워딩 권장<br/>
+                • 예시: <code class="bg-muted px-1 py-0.5 rounded">python3 -m http.server 8080</code> → <code class="bg-muted px-1 py-0.5 rounded">socat TCP-LISTEN:80,fork,reuseaddr TCP:localhost:8080</code>
+              </p>
+            </div>
+          </div>
           <p class="text-xs text-muted-foreground mt-3">
             cloudflared 설치: <code class="bg-muted px-1 py-0.5 rounded">brew install cloudflared</code> (macOS)
             | <a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/" target="_blank" class="underline">다운로드</a> (Linux/Windows)
@@ -267,7 +284,13 @@ export default function Dashboard(props: Props) {
                   <div>
                     <span class="text-muted-foreground">SSH: </span>
                     <code class="text-xs bg-muted px-1.5 py-0.5 rounded break-all">
-                      ssh {session.username}@{session.subdomain}
+                      ssh {session.username}@{session.username}-ssh-{getDomain()}
+                    </code>
+                  </div>
+                  <div>
+                    <span class="text-muted-foreground">Web: </span>
+                    <code class="text-xs bg-muted px-1.5 py-0.5 rounded break-all">
+                      https://{session.username}-web-{getDomain()}
                     </code>
                   </div>
                   <div class="flex gap-4 text-muted-foreground">
@@ -325,9 +348,14 @@ export default function Dashboard(props: Props) {
                       </span>
                     </td>
                     <td class="p-4 align-middle">
-                      <code class="text-xs bg-muted px-2 py-1 rounded">
-                        ssh {session.username}@{session.subdomain}
-                      </code>
+                      <div class="space-y-1">
+                        <code class="text-xs bg-muted px-2 py-1 rounded block">
+                          ssh {session.username}@{session.username}-ssh-{getDomain()}
+                        </code>
+                        <code class="text-xs bg-muted px-2 py-1 rounded block">
+                          https://{session.username}-web-{getDomain()}
+                        </code>
+                      </div>
                     </td>
                     <td class="p-4 align-middle text-sm text-muted-foreground">
                       {session.memoryLimit}MB / {session.cpuLimit} CPU

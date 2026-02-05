@@ -16,7 +16,7 @@ export const config = {
 
   databaseUrl: required('DATABASE_URL'),
 
-  adminPassword: required('ADMIN_PASSWORD'),
+  adminPasswordHash: required('ADMIN_PASSWORD_HASH'),
   jwtSecret: required('JWT_SECRET'),
 
   cfApiToken: optional('CF_API_TOKEN', ''),

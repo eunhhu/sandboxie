@@ -68,6 +68,7 @@ export interface Session {
   username: string;
   subdomain: string;
   sshPort: number;
+  httpPort: number;
   memoryLimit: number;
   cpuLimit: number;
   status: string;

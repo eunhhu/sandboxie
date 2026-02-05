@@ -42,6 +42,7 @@ export async function createContainer(opts: {
   username: string;
   password: string;
   sshPort: number;
+  httpPort: number;
   memoryLimit: number;
   cpuLimit: number;
 }): Promise<string> {
@@ -51,6 +52,7 @@ export async function createContainer(opts: {
     '--name', opts.name,
     '--hostname', opts.username,
     '-p', `${opts.sshPort}:22`,
+    '-p', `${opts.httpPort}:80`,
     '--cpus', `${opts.cpuLimit}`,
     '-e', `SANDBOX_USER=${opts.username}`,
     '-e', `SANDBOX_PASSWORD=${opts.password}`,

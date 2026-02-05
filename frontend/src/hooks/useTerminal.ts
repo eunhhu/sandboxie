@@ -51,6 +51,7 @@ export function useTerminal(username: string) {
       scrollback: 5000,
       allowProposedApi: true,
       scrollOnUserInput: true,
+      smoothScrollDuration: 0, // Disable smooth scroll for better mobile performance
     });
 
     fitAddon = new FitAddon();
@@ -83,16 +84,7 @@ export function useTerminal(username: string) {
       }
     });
 
-    // mobile viewport handling
-    if (isMobile() && window.visualViewport) {
-      const onViewportResize = () => {
-        const vh = window.visualViewport!.height;
-        container.style.height = `${vh - container.getBoundingClientRect().top}px`;
-        fitAddon?.fit();
-      };
-      window.visualViewport.addEventListener('resize', onViewportResize);
-      onCleanup(() => window.visualViewport?.removeEventListener('resize', onViewportResize));
-    }
+    // mobile viewport - handled by parent component now
 
     return terminal;
   }
@@ -207,6 +199,7 @@ export function useTerminal(username: string) {
     status,
     errorMessage,
     terminalInstance: () => terminal,
+    fitAddon: () => fitAddon,
     createTerminal,
     connect,
     disconnect,

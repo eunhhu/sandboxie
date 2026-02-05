@@ -19,7 +19,12 @@ export default function Login(props: Props) {
       await login(password());
       props.onLogin();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      const message = err instanceof Error ? err.message : 'Login failed';
+      if (message.includes('Too many login attempts')) {
+        setError('⚠️ 로그인 시도 횟수 초과. 15분 후 다시 시도하세요.');
+      } else {
+        setError('비밀번호가 올바르지 않습니다.');
+      }
     } finally {
       setLoading(false);
     }

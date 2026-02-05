@@ -1,16 +1,7 @@
 import { Elysia } from 'elysia';
 import { jwt } from '@elysiajs/jwt';
 import { config } from '../config';
-import { verifyPassword, hashPassword } from '../utils/password';
-
-let adminPasswordHash: string | null = null;
-
-async function getAdminHash(): Promise<string> {
-  if (!adminPasswordHash) {
-    adminPasswordHash = await hashPassword(config.adminPassword);
-  }
-  return adminPasswordHash;
-}
+import { verifyPassword } from '../utils/password';
 
 // Rate limiting state
 const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
@@ -58,8 +49,7 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
       return { error: 'Too many login attempts. Try again later.' };
     }
 
-    const hash = await getAdminHash();
-    const valid = await verifyPassword(password, hash);
+    const valid = await verifyPassword(password, config.adminPasswordHash);
 
     if (!valid) {
       // Track failed attempt

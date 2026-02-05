@@ -10,7 +10,7 @@ interface Props {
 type ModifierKey = 'ctrl' | 'alt' | 'shift';
 
 export default function Terminal(props: Props) {
-  const { status, errorMessage, createTerminal, connect, disconnect, terminalInstance } = useTerminal(props.username);
+  const { status, errorMessage, createTerminal, connect, disconnect, terminalInstance, fitAddon } = useTerminal(props.username);
   const [password, setPassword] = createSignal('');
   const [activeModifiers, setActiveModifiers] = createSignal<Set<ModifierKey>>(new Set());
 
@@ -19,6 +19,25 @@ export default function Terminal(props: Props) {
   onMount(() => {
     if (containerRef) {
       createTerminal(containerRef);
+    }
+
+    // Mobile viewport handling
+    const isMobile = () => window.innerWidth < 768;
+    if (isMobile() && window.visualViewport) {
+      const handleViewportChange = () => {
+        // Trigger terminal resize
+        setTimeout(() => {
+          const fit = fitAddon();
+          if (fit) {
+            fit.fit();
+          }
+        }, 100);
+      };
+
+      window.visualViewport.addEventListener('resize', handleViewportChange);
+      onCleanup(() => {
+        window.visualViewport?.removeEventListener('resize', handleViewportChange);
+      });
     }
 
     // Listen to real keyboard events and apply modifiers
@@ -32,38 +51,46 @@ export default function Terminal(props: Props) {
       // If any modifier is active, intercept and apply
       if (mods.has('ctrl') || mods.has('alt') || mods.has('shift')) {
         e.preventDefault();
+        e.stopPropagation();
 
-        const key = e.key;
-        const ctrlKey = mods.has('ctrl') || e.ctrlKey;
-        const altKey = mods.has('alt') || e.altKey;
-        const shiftKey = mods.has('shift') || e.shiftKey;
+        const key = e.key.toLowerCase();
 
-        // Send special sequences for common shortcuts
-        if (ctrlKey && !altKey && !shiftKey) {
-          if (key === 'c' || key === 'C') {
-            term.input('\x03'); // Ctrl+C
-            setActiveModifiers(new Set<ModifierKey>());
-            return;
-          } else if (key === 'd' || key === 'D') {
-            term.input('\x04'); // Ctrl+D
-            setActiveModifiers(new Set<ModifierKey>());
-            return;
-          } else if (key === 'z' || key === 'Z') {
-            term.input('\x1a'); // Ctrl+Z
+        // Generate proper control sequences
+        if (mods.has('ctrl')) {
+          // Ctrl+A-Z = 0x01-0x1A
+          if (key.length === 1 && key >= 'a' && key <= 'z') {
+            const code = key.charCodeAt(0) - 96; // a=1, b=2, ..., z=26
+            term.write(String.fromCharCode(code));
             setActiveModifiers(new Set<ModifierKey>());
             return;
           }
         }
 
-        // For other keys, apply modifiers
-        term.input(key, { ctrlKey, altKey, shiftKey } as any);
+        // Alt combinations
+        if (mods.has('alt') && !mods.has('ctrl')) {
+          if (key.length === 1) {
+            term.write('\x1b' + key);
+            setActiveModifiers(new Set<ModifierKey>());
+            return;
+          }
+        }
+
+        // Shift - just pass the key as-is (uppercase)
+        if (mods.has('shift') && !mods.has('ctrl') && !mods.has('alt')) {
+          if (e.key.length === 1) {
+            term.write(e.key);
+            setActiveModifiers(new Set<ModifierKey>());
+            return;
+          }
+        }
+
         setActiveModifiers(new Set<ModifierKey>());
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
     onCleanup(() => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, true);
     });
   });
 
@@ -215,16 +242,18 @@ export default function Terminal(props: Props) {
       </div>
 
       {/* Terminal area */}
-      <div class="relative flex-1 overflow-hidden">
+      <div
+        class="relative"
+        style={{
+          overflow: 'hidden',
+          flex: '1 1 0',
+          'min-height': '0',
+        }}
+      >
         <div
           ref={containerRef}
           class="w-full h-full"
-          style={{
-            padding: '4px',
-            'touch-action': 'pan-y',
-            '-webkit-overflow-scrolling': 'touch',
-            'overflow-y': 'auto',
-          }}
+          style={{ padding: '4px' }}
         />
 
         {/* Auth overlay */}

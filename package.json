@@ -12,7 +12,8 @@
     "db:generate": "bun run --cwd backend drizzle-kit generate",
     "db:migrate": "bun run backend/src/db/migrate.ts",
     "test": "bun test",
-    "deploy": "bash scripts/deploy.sh"
+    "deploy": "bash scripts/deploy.sh",
+    "hash-password": "bun run scripts/hash-password.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.1",

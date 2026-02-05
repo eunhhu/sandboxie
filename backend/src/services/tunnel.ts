@@ -150,7 +150,9 @@ export async function addSshIngress(username: string, sshPort: number): Promise<
     return;
   }
 
-  const hostname = `${username}-${config.cfDomain}`;
+  // Cloudflare 무료 플랜: username-ssh-sandbox.qucord.com
+  const domain = config.cfDomain.split('.').slice(-2).join('.');
+  const hostname = `${username}-ssh-${config.cfDomain.split('.')[0]}.${domain}`;
 
   const cfg = await readConfig();
 
@@ -180,7 +182,47 @@ export async function addSshIngress(username: string, sshPort: number): Promise<
   await writeConfig(cfg);
   scheduleRestartTunnel();
 
-  console.log(`Tunnel ingress added: ${hostname} → ssh://localhost:${sshPort}`);
+  console.log(`Tunnel ingress added: ${hostname} → ssh://127.0.0.1:${sshPort}`);
+}
+
+export async function addHttpIngress(username: string, httpPort: number): Promise<void> {
+  if (!config.cfDomain) {
+    console.warn('CF_DOMAIN not configured, skipping tunnel ingress');
+    return;
+  }
+
+  // Cloudflare 무료 플랜: username-web-sandbox.qucord.com
+  const domain = config.cfDomain.split('.').slice(-2).join('.');
+  const hostname = `${username}-web-${config.cfDomain.split('.')[0]}.${domain}`;
+
+  const cfg = await readConfig();
+
+  // 이미 존재하면 스킵
+  if (cfg.ingress.some(r => r.hostname === hostname)) {
+    console.log(`Ingress already exists for ${hostname}`);
+    return;
+  }
+
+  // catch-all 규칙 앞에 삽입
+  const catchAllIdx = cfg.ingress.findIndex(r => !r.hostname);
+  const wildcardIdx = cfg.ingress.findIndex(r => r.hostname?.startsWith('*'));
+
+  let insertIdx = catchAllIdx >= 0 ? catchAllIdx : cfg.ingress.length;
+  if (wildcardIdx >= 0 && wildcardIdx < insertIdx) {
+    insertIdx = wildcardIdx;
+  }
+
+  const newRule: IngressRule = {
+    hostname,
+    service: `http://127.0.0.1:${httpPort}`,
+  };
+
+  cfg.ingress.splice(insertIdx, 0, newRule);
+
+  await writeConfig(cfg);
+  scheduleRestartTunnel();
+
+  console.log(`Tunnel ingress added: ${hostname} → http://127.0.0.1:${httpPort}`);
 }
 
 export async function removeSshIngress(username: string): Promise<void> {
@@ -189,7 +231,32 @@ export async function removeSshIngress(username: string): Promise<void> {
     return;
   }
 
-  const hostname = `${username}-${config.cfDomain}`;
+  const domain = config.cfDomain.split('.').slice(-2).join('.');
+  const hostname = `${username}-ssh-${config.cfDomain.split('.')[0]}.${domain}`;
+
+  const cfg = await readConfig();
+  const before = cfg.ingress.length;
+  cfg.ingress = cfg.ingress.filter(r => r.hostname !== hostname);
+
+  if (cfg.ingress.length === before) {
+    console.log(`No ingress found for ${hostname}`);
+    return;
+  }
+
+  await writeConfig(cfg);
+  scheduleRestartTunnel();
+
+  console.log(`Tunnel ingress removed: ${hostname}`);
+}
+
+export async function removeHttpIngress(username: string): Promise<void> {
+  if (!config.cfDomain) {
+    console.warn('CF_DOMAIN not configured, skipping tunnel ingress removal');
+    return;
+  }
+
+  const domain = config.cfDomain.split('.').slice(-2).join('.');
+  const hostname = `${username}-web-${config.cfDomain.split('.')[0]}.${domain}`;
 
   const cfg = await readConfig();
   const before = cfg.ingress.length;
