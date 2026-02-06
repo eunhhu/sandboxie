@@ -16,6 +16,7 @@ Sandboxie creates isolated Podman containers for each user, providing a fully-fe
 - **Auto DNS**: Automatic subdomain creation via Cloudflare API
 - **Admin Dashboard**: Web UI for session management, monitoring, and creation
 - **Security First**: Rate-limited authentication, Argon2id password hashing, JWT tokens
+- **AI Coding Agents**: Per-session Claude Code and Codex integration with task queue, real-time output streaming, and Web Push notifications
 - **Single Binary Deployment**: Compile to a single executable with Bun
 
 ## Technology Stack

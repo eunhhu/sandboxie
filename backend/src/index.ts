@@ -5,6 +5,8 @@ import { config } from './config';
 import { authRoutes } from './routes/auth';
 import { sessionRoutes } from './routes/sessions';
 import { terminalRoutes } from './routes/terminal';
+import { agentRoutes } from './routes/agent';
+import { pushRoutes } from './routes/push';
 
 function resolveStaticDir(): string {
   if (process.env.STATIC_DIR) return resolve(process.env.STATIC_DIR);
@@ -32,6 +34,8 @@ const app = new Elysia()
   .use(authRoutes)
   .use(sessionRoutes)
   .use(terminalRoutes)
+  .use(agentRoutes)
+  .use(pushRoutes)
   .get('/*', async ({ path }) => {
     const indexFile = resolve(STATIC_DIR, 'index.html');
 

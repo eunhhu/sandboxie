@@ -4,6 +4,7 @@ import { getSessions, createSession, deleteSession, restartSession, type Session
 interface Props {
   onLogout: () => void;
   onOpenTerminal: (username: string) => void;
+  onOpenAgent: (username: string) => void;
 }
 
 export default function Dashboard(props: Props) {
@@ -318,6 +319,13 @@ export default function Dashboard(props: Props) {
                     터미널
                   </button>
                   <button
+                    onClick={() => props.onOpenAgent(session.username)}
+                    disabled={session.status !== 'running'}
+                    class="flex-1 inline-flex items-center justify-center rounded-md text-xs border border-blue-500 text-blue-600 bg-blue-50 hover:bg-blue-100 h-8 px-3 disabled:opacity-40"
+                  >
+                    에이전트
+                  </button>
+                  <button
                     onClick={() => handleRestart(session.username)}
                     disabled={actionLoading() === session.username}
                     class="flex-1 inline-flex items-center justify-center rounded-md text-xs border border-input bg-background hover:bg-accent h-8 px-3 disabled:opacity-50"
@@ -384,6 +392,13 @@ export default function Dashboard(props: Props) {
                           class="inline-flex items-center justify-center rounded-md text-xs bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3 disabled:opacity-40"
                         >
                           터미널
+                        </button>
+                        <button
+                          onClick={() => props.onOpenAgent(session.username)}
+                          disabled={session.status !== 'running'}
+                          class="inline-flex items-center justify-center rounded-md text-xs border border-blue-500 text-blue-600 bg-blue-50 hover:bg-blue-100 h-8 px-3 disabled:opacity-40"
+                        >
+                          에이전트
                         </button>
                         <button
                           onClick={() => handleRestart(session.username)}

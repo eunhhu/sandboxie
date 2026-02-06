@@ -15,10 +15,12 @@ export async function listSessions() {
     subdomain: sessions.subdomain,
     sshPort: sessions.sshPort,
     httpPort: sessions.httpPort,
+    agentPort: sessions.agentPort,
     containerName: sessions.containerName,
     memoryLimit: sessions.memoryLimit,
     cpuLimit: sessions.cpuLimit,
     status: sessions.status,
+    agentEnabled: sessions.agentEnabled,
     createdAt: sessions.createdAt,
     expiresAt: sessions.expiresAt,
     lastAccessedAt: sessions.lastAccessedAt,
@@ -40,7 +42,7 @@ export async function createSession(opts: {
   cpuLimit?: number;
   ttl?: number;
 }): Promise<Session> {
-  const { sshPort, httpPort } = await allocatePort();
+  const { sshPort, httpPort, agentPort } = await allocatePort();
   const containerName = `sandbox-${opts.username}`;
   const subdomain = config.cfDomain
     ? `${opts.username}-${config.cfDomain}`
@@ -59,6 +61,7 @@ export async function createSession(opts: {
       password: opts.password,
       sshPort,
       httpPort,
+      agentPort,
       memoryLimit: opts.memoryLimit ?? 256,
       cpuLimit: opts.cpuLimit ?? 0.5,
     });
@@ -92,6 +95,7 @@ export async function createSession(opts: {
         subdomain,
         sshPort,
         httpPort,
+        agentPort,
         containerName,
         memoryLimit: opts.memoryLimit ?? 256,
         cpuLimit: opts.cpuLimit ?? 0.5,

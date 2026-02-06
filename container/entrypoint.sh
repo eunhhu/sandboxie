@@ -57,4 +57,10 @@ EOF
     chown ${SANDBOX_USER}:${SANDBOX_USER} /home/${SANDBOX_USER}/.npm-global
 fi
 
+# Start agent-runner in background
+if [ -f /opt/agent-runner.ts ]; then
+    SANDBOX_USER="$SANDBOX_USER" bun run /opt/agent-runner.ts &
+    echo "Agent runner started on port 9090"
+fi
+
 exec /usr/sbin/sshd -D

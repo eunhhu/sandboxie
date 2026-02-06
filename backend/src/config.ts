@@ -28,4 +28,11 @@ export const config = {
   sandboxImage: optional('SANDBOX_IMAGE', 'localhost/sandboxie:latest'),
   sshPortStart: parseInt(optional('SSH_PORT_START', '2200'), 10),
   sshPortEnd: parseInt(optional('SSH_PORT_END', '2299'), 10),
+  agentPortStart: parseInt(optional('AGENT_PORT_START', '4200'), 10),
+  agentPortEnd: parseInt(optional('AGENT_PORT_END', '4299'), 10),
+
+  encryptionKey: optional('ENCRYPTION_KEY', ''),
+  vapidPublicKey: optional('VAPID_PUBLIC_KEY', ''),
+  vapidPrivateKey: optional('VAPID_PRIVATE_KEY', ''),
+  vapidSubject: optional('VAPID_SUBJECT', 'mailto:admin@example.com'),
 } as const;
