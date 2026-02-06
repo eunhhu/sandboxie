@@ -1,32 +1,80 @@
-import { Elysia } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { jwt } from '@elysiajs/jwt';
 import { config } from '../config';
 import { verifyPassword } from '../utils/password';
 
 // Rate limiting state
-const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
+interface LoginAttempt {
+  count: number;
+  lockedUntil: number;
+  lastAttempt: number;
+}
+
+const loginAttempts = new Map<string, LoginAttempt>();
 
 const MAX_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const STALE_ENTRY_MS = 60 * 60 * 1000; // 1 hour — remove unlocked stale entries
 
-// Cleanup expired entries periodically
-setInterval(() => {
+// Cleanup expired and stale entries periodically
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [ip, entry] of loginAttempts) {
+    // Remove expired locks
     if (entry.lockedUntil > 0 && entry.lockedUntil < now) {
+      loginAttempts.delete(ip);
+      continue;
+    }
+    // Remove stale entries that never reached lock threshold
+    if (entry.lockedUntil === 0 && now - entry.lastAttempt > STALE_ENTRY_MS) {
       loginAttempts.delete(ip);
     }
   }
 }, CLEANUP_INTERVAL_MS);
 
+// Allow clean shutdown
+if (typeof process !== 'undefined') {
+  process.on('beforeExit', () => clearInterval(cleanupTimer));
+}
+
+// Cloudflare IPv4 ranges (https://www.cloudflare.com/ips-v4/)
+const CF_IPV4_RANGES = [
+  '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22',
+  '141.101.64.0/18', '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20',
+  '197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13',
+  '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
+];
+
+function ipToLong(ip: string): number {
+  return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet), 0) >>> 0;
+}
+
+function isInCidr(ip: string, cidr: string): boolean {
+  const [rangeIp, bits] = cidr.split('/');
+  const mask = ~((1 << (32 - parseInt(bits))) - 1) >>> 0;
+  return (ipToLong(ip) & mask) === (ipToLong(rangeIp) & mask);
+}
+
+function isCloudflareIp(ip: string): boolean {
+  // Skip IPv6 — trust cf headers only for known IPv4 ranges
+  if (ip.includes(':')) return false;
+  return CF_IPV4_RANGES.some((range) => isInCidr(ip, range));
+}
+
 function getClientIp(request: Request, server: any): string {
-  return (
-    request.headers.get('cf-connecting-ip') ??
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    server?.requestIP?.(request)?.address ??
-    'unknown'
-  );
+  const directIp = server?.requestIP?.(request)?.address ?? 'unknown';
+
+  // Only trust proxy headers if request comes from Cloudflare
+  if (isCloudflareIp(directIp)) {
+    return (
+      request.headers.get('cf-connecting-ip') ??
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+      directIp
+    );
+  }
+
+  return directIp;
 }
 
 export const authRoutes = new Elysia({ prefix: '/api/auth' })
@@ -37,7 +85,7 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
     })
   )
   .post('/login', async ({ body, jwt, set, request, server }) => {
-    const { password } = body as { password: string };
+    const { password } = body;
     const ip = getClientIp(request, server);
 
     // Check rate limit
@@ -53,8 +101,9 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
 
     if (!valid) {
       // Track failed attempt
-      const current = loginAttempts.get(ip) ?? { count: 0, lockedUntil: 0 };
+      const current = loginAttempts.get(ip) ?? { count: 0, lockedUntil: 0, lastAttempt: 0 };
       current.count += 1;
+      current.lastAttempt = Date.now();
       if (current.count >= MAX_ATTEMPTS) {
         current.lockedUntil = Date.now() + LOCK_DURATION_MS;
         current.count = 0;
@@ -68,9 +117,15 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
     // Reset on successful login
     loginAttempts.delete(ip);
 
+    const now = Math.floor(Date.now() / 1000);
     const token = await jwt.sign({
+      sub: 'admin',
       role: 'admin',
-      exp: Math.floor(Date.now() / 1000) + 86400, // 24 hours
+      exp: now + 86400, // 24 hours
     });
     return { token };
+  }, {
+    body: t.Object({
+      password: t.String({ minLength: 1 }),
+    }),
   });

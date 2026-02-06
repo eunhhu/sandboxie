@@ -59,12 +59,7 @@ export function useTerminal(username: string) {
       // Mobile touch optimizations
       rightClickSelectsWord: mobile,
       altClickMovesCursor: !mobile,
-      // Better mobile scrolling
-      fastScrollModifier: 'alt',
-      fastScrollSensitivity: 5,
       scrollSensitivity: mobile ? 3 : 1,
-      // Selection options for mobile
-      overviewRuler: {},
     });
 
     fitAddon = new FitAddon();
@@ -82,7 +77,6 @@ export function useTerminal(username: string) {
       const viewportElement = container.querySelector('.xterm-viewport') as HTMLElement;
       if (viewportElement) {
         viewportElement.style.overscrollBehavior = 'contain';
-        viewportElement.style.webkitOverflowScrolling = 'touch';
       }
     }
 
@@ -126,7 +120,8 @@ export function useTerminal(username: string) {
     setErrorMessage('');
 
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${proto}//${location.host}/api/terminal/${username}`);
+    const token = localStorage.getItem('token');
+    ws = new WebSocket(`${proto}//${location.host}/api/terminal/${username}${token ? `?token=${encodeURIComponent(token)}` : ''}`);
 
     ws.onopen = () => {
       setStatus('authenticating');

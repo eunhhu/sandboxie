@@ -22,7 +22,12 @@ function resolveStaticDir(): string {
 const STATIC_DIR = resolveStaticDir();
 
 const app = new Elysia()
-  .use(cors())
+  .use(cors({
+    origin: config.allowedOrigins
+      ? config.allowedOrigins.split(',').map((o) => o.trim())
+      : true, // dev: allow all; production: set ALLOWED_ORIGINS
+    credentials: true,
+  }))
   .get('/api/health', () => ({ status: 'ok', timestamp: new Date().toISOString() }))
   .use(authRoutes)
   .use(sessionRoutes)

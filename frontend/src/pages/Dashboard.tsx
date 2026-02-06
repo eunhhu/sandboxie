@@ -18,15 +18,19 @@ export default function Dashboard(props: Props) {
   const [newTtl, setNewTtl] = createSignal(0);
   const [createError, setCreateError] = createSignal('');
   const [creating, setCreating] = createSignal(false);
+  const [actionLoading, setActionLoading] = createSignal<string | null>(null);
 
   const loadSessions = async () => {
     setLoading(true);
     try {
       const data = await getSessions();
       setSessions(data.sessions);
-    } catch {
-      localStorage.removeItem('token');
-      props.onLogout();
+    } catch (err) {
+      // Only logout on auth errors; show message for other failures
+      if (err instanceof Error && err.message === 'Unauthorized') {
+        localStorage.removeItem('token');
+        props.onLogout();
+      }
     } finally {
       setLoading(false);
     }
@@ -69,20 +73,28 @@ export default function Dashboard(props: Props) {
 
   const handleDelete = async (username: string) => {
     if (!confirm(`${username} 세션을 삭제하시겠습니까?`)) return;
+    if (actionLoading()) return;
+    setActionLoading(username);
     try {
       await deleteSession(username);
       await loadSessions();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete session');
+    } finally {
+      setActionLoading(null);
     }
   };
 
   const handleRestart = async (username: string) => {
+    if (actionLoading()) return;
+    setActionLoading(username);
     try {
       await restartSession(username);
       await loadSessions();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to restart session');
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -307,13 +319,15 @@ export default function Dashboard(props: Props) {
                   </button>
                   <button
                     onClick={() => handleRestart(session.username)}
-                    class="flex-1 inline-flex items-center justify-center rounded-md text-xs border border-input bg-background hover:bg-accent h-8 px-3"
+                    disabled={actionLoading() === session.username}
+                    class="flex-1 inline-flex items-center justify-center rounded-md text-xs border border-input bg-background hover:bg-accent h-8 px-3 disabled:opacity-50"
                   >
-                    재시작
+                    {actionLoading() === session.username ? '...' : '재시작'}
                   </button>
                   <button
                     onClick={() => handleDelete(session.username)}
-                    class="flex-1 inline-flex items-center justify-center rounded-md text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90 h-8 px-3"
+                    disabled={actionLoading() === session.username}
+                    class="flex-1 inline-flex items-center justify-center rounded-md text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90 h-8 px-3 disabled:opacity-50"
                   >
                     삭제
                   </button>
@@ -373,13 +387,15 @@ export default function Dashboard(props: Props) {
                         </button>
                         <button
                           onClick={() => handleRestart(session.username)}
-                          class="inline-flex items-center justify-center rounded-md text-xs border border-input bg-background hover:bg-accent h-8 px-3"
+                          disabled={actionLoading() === session.username}
+                          class="inline-flex items-center justify-center rounded-md text-xs border border-input bg-background hover:bg-accent h-8 px-3 disabled:opacity-50"
                         >
-                          재시작
+                          {actionLoading() === session.username ? '...' : '재시작'}
                         </button>
                         <button
                           onClick={() => handleDelete(session.username)}
-                          class="inline-flex items-center justify-center rounded-md text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90 h-8 px-3"
+                          disabled={actionLoading() === session.username}
+                          class="inline-flex items-center justify-center rounded-md text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90 h-8 px-3 disabled:opacity-50"
                         >
                           삭제
                         </button>

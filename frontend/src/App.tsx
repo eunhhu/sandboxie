@@ -1,7 +1,7 @@
-import { createSignal, Show } from 'solid-js';
+import { createSignal, Show, lazy, Suspense, onCleanup } from 'solid-js';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import Terminal from './pages/Terminal';
+const Terminal = lazy(() => import('./pages/Terminal'));
 
 type Page =
   | { type: 'login' }
@@ -31,9 +31,9 @@ export default function App() {
     setPage(p);
   };
 
-  window.addEventListener('popstate', () => {
-    setPage(getInitialPage());
-  });
+  const handlePopstate = () => setPage(getInitialPage());
+  window.addEventListener('popstate', handlePopstate);
+  onCleanup(() => window.removeEventListener('popstate', handlePopstate));
 
   return (
     <div class="min-h-screen bg-background">
@@ -47,10 +47,12 @@ export default function App() {
         />
       </Show>
       <Show when={page().type === 'terminal'}>
-        <Terminal
-          username={(page() as { type: 'terminal'; username: string }).username}
-          onBack={() => navigate({ type: 'dashboard' })}
-        />
+        <Suspense fallback={<div class="flex items-center justify-center min-h-screen text-muted-foreground">Loading terminal...</div>}>
+          <Terminal
+            username={(page() as { type: 'terminal'; username: string }).username}
+            onBack={() => navigate({ type: 'dashboard' })}
+          />
+        </Suspense>
       </Show>
     </div>
   );

@@ -80,14 +80,6 @@ export async function restartContainer(name: string): Promise<void> {
   await run(['start', name]);
 }
 
-export async function stopContainer(name: string): Promise<void> {
-  await run(['stop', name]);
-}
-
-export async function startContainer(name: string): Promise<void> {
-  await run(['start', name]);
-}
-
 export async function getContainerStats(name: string): Promise<ContainerStats> {
   const output = await run([
     'stats', name,
@@ -118,11 +110,3 @@ function parseUptimeToSeconds(uptime: string): number {
   return total;
 }
 
-export async function getContainerStatus(name: string): Promise<string> {
-  try {
-    const output = await run(['inspect', name, '--format', '{{.State.Status}}']);
-    return output;
-  } catch {
-    return 'stopped';
-  }
-}

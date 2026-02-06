@@ -1,7 +1,9 @@
 import { Elysia } from 'elysia';
+import { jwt } from '@elysiajs/jwt';
 import type { Client, ClientChannel } from 'ssh2';
 import { connectSSH } from '../services/ssh';
 import * as sessionService from '../services/session';
+import { config } from '../config';
 
 interface WSState {
   sshClient: Client | null;
@@ -9,15 +11,50 @@ interface WSState {
   authenticated: boolean;
 }
 
-// Key by username — one terminal session per user
+// Key by unique connection ID — supports multiple terminals per user
 const wsStateMap = new Map<string, WSState>();
 
+let connectionIdCounter = 0;
+function nextConnectionId(username: string): string {
+  return `${username}:${++connectionIdCounter}`;
+}
+
 export const terminalRoutes = new Elysia()
+  .use(
+    jwt({
+      name: 'jwt',
+      secret: config.jwtSecret,
+    })
+  )
   .ws('/api/terminal/:username', {
-    open(ws) {
+    async open(ws) {
       const username = (ws.data.params as { username: string }).username;
-      console.log(`[terminal] WS open: ${username}`);
-      wsStateMap.set(username, {
+
+      // Verify JWT token from query parameter
+      const url = new URL(ws.data.request?.url ?? '', 'http://localhost');
+      const token = url.searchParams.get('token');
+
+      if (!token) {
+        console.log(`[terminal] WS rejected (no token): ${username}`);
+        ws.send(JSON.stringify({ type: 'error', message: 'Authentication required' }));
+        ws.close();
+        return;
+      }
+
+      const jwtVerify = (ws.data as any).jwt;
+      const payload = await jwtVerify.verify(token);
+      if (!payload) {
+        console.log(`[terminal] WS rejected (invalid token): ${username}`);
+        ws.send(JSON.stringify({ type: 'error', message: 'Invalid token' }));
+        ws.close();
+        return;
+      }
+
+      const connId = nextConnectionId(username);
+      (ws.data as any)._connId = connId;
+
+      console.log(`[terminal] WS open: ${username} (${connId})`);
+      wsStateMap.set(connId, {
         sshClient: null,
         sshStream: null,
         authenticated: false,
@@ -26,10 +63,16 @@ export const terminalRoutes = new Elysia()
 
     async message(ws, raw) {
       const username = (ws.data.params as { username: string }).username;
-      const state = wsStateMap.get(username);
+      const connId = (ws.data as any)._connId as string | undefined;
 
+      if (!connId) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Not authenticated' }));
+        return;
+      }
+
+      const state = wsStateMap.get(connId);
       if (!state) {
-        console.log(`[terminal] No state for ${username}`);
+        console.log(`[terminal] No state for ${connId}`);
         ws.send(JSON.stringify({ type: 'error', message: 'Internal error' }));
         return;
       }
@@ -41,8 +84,6 @@ export const terminalRoutes = new Elysia()
         ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON' }));
         return;
       }
-
-      console.log(`[terminal] msg type=${msg.type} user=${username}`);
 
       if (msg.type === 'ping') {
         ws.send(JSON.stringify({ type: 'pong' }));
@@ -79,7 +120,7 @@ export const terminalRoutes = new Elysia()
           state.authenticated = true;
 
           ws.send(JSON.stringify({ type: 'authenticated' }));
-          console.log(`[terminal] SSH authenticated for ${username}`);
+          console.log(`[terminal] SSH authenticated for ${username} (${connId})`);
 
           stream.on('data', (data: Buffer) => {
             ws.send(JSON.stringify({
@@ -101,7 +142,7 @@ export const terminalRoutes = new Elysia()
         } catch (err) {
           const message = err instanceof Error ? err.message : 'SSH connection failed';
           console.log(`[terminal] SSH connect failed: ${message}`);
-          ws.send(JSON.stringify({ type: 'error', message }));
+          ws.send(JSON.stringify({ type: 'error', message: 'SSH connection failed' }));
           ws.close();
         }
 
@@ -129,14 +170,19 @@ export const terminalRoutes = new Elysia()
 
     close(ws) {
       const username = (ws.data.params as { username: string }).username;
-      const state = wsStateMap.get(username);
-      console.log(`[terminal] WS close: ${username}`);
-      if (state?.sshStream) {
-        state.sshStream.close();
+      const connId = (ws.data as any)._connId as string | undefined;
+
+      console.log(`[terminal] WS close: ${username} (${connId ?? 'unknown'})`);
+
+      if (connId) {
+        const state = wsStateMap.get(connId);
+        if (state?.sshStream) {
+          state.sshStream.close();
+        }
+        if (state?.sshClient) {
+          state.sshClient.end();
+        }
+        wsStateMap.delete(connId);
       }
-      if (state?.sshClient) {
-        state.sshClient.end();
-      }
-      wsStateMap.delete(username);
     },
   });

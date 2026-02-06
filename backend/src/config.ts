@@ -13,6 +13,7 @@ function optional(key: string, defaultValue: string): string {
 export const config = {
   port: parseInt(optional('PORT', '3000'), 10),
   host: optional('HOST', '0.0.0.0'),
+  allowedOrigins: optional('ALLOWED_ORIGINS', ''),
 
   databaseUrl: required('DATABASE_URL'),
 
