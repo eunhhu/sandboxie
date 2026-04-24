@@ -1,6 +1,28 @@
 {
   "name": "sandboxie",
   "private": true,
+  "description": "Containerized sandbox management system that provisions isolated Podman-backed Linux shells over the web, with AI agent integration and Cloudflare-Tunnel SSH.",
+  "license": "MIT",
+  "homepage": "https://github.com/eunhhu/sandboxie#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eunhhu/sandboxie.git"
+  },
+  "bugs": {
+    "url": "https://github.com/eunhhu/sandboxie/issues"
+  },
+  "keywords": [
+    "podman",
+    "sandbox",
+    "terminal",
+    "xterm",
+    "cloudflare-tunnel",
+    "bun",
+    "elysia",
+    "solidjs",
+    "ssh",
+    "ai-agents"
+  ],
   "workspaces": ["backend", "frontend"],
   "scripts": {
     "dev:backend": "bun run --watch backend/src/index.ts",
@@ -11,13 +33,18 @@
     "db:down": "podman compose down",
     "db:generate": "bun run --cwd backend drizzle-kit generate",
     "db:migrate": "bun run backend/src/db/migrate.ts",
-    "test": "bun test",
+    "typecheck:backend": "tsc -p backend --noEmit --ignoreDeprecations 6.0",
+    "typecheck:frontend": "tsc -p frontend --noEmit --ignoreDeprecations 6.0",
+    "typecheck": "bun run typecheck:backend && bun run typecheck:frontend",
+    "test": "bun run typecheck",
+    "test:e2e": "playwright test",
     "deploy": "bash scripts/deploy.sh",
     "hash-password": "bun run scripts/hash-password.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.1",
-    "playwright": "^1.58.1"
+    "playwright": "^1.58.1",
+    "typescript": "^5.7.0"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.48"

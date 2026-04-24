@@ -109,8 +109,8 @@ export default function Dashboard(props: Props) {
   const getDomain = () => {
     const s = sessions();
     if (s.length === 0) return 'sandbox.yourdomain.com';
-    // subdomain 형식: username-sandbox.qucord.com
-    // username 부분 제거하고 domain만 추출
+    // subdomain shape: username-sandbox.example.com — strip the username
+    // prefix and return just the shared domain portion.
     const subdomain = s[0].subdomain;
     const firstDash = subdomain.indexOf('-');
     if (firstDash === -1) return subdomain;

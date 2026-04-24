@@ -1,0 +1,4 @@
+[test]
+# Playwright owns e2e/; `bun test` should not load those specs.
+# Limit bun's test discovery to backend/ and frontend/ units.
+root = "backend"

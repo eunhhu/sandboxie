@@ -99,13 +99,15 @@ export async function submitTask(username: string, opts: {
     })
     .returning();
 
-  // Send task to container's agent-runner
+  // Send task to container's agent-runner, passing our DB id so the runner
+  // uses the same id — this keeps cancel / poll URLs consistent.
   try {
     const agentUrl = `http://127.0.0.1:${session.agentPort}`;
     const res = await fetch(`${agentUrl}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        id: task.id,
         agent: opts.agent,
         prompt: opts.prompt,
         workingDir: opts.workingDir || '~/',
@@ -118,8 +120,6 @@ export async function submitTask(username: string, opts: {
       throw new Error((errData as any).error || `Agent runner returned ${res.status}`);
     }
 
-    const data = await res.json() as { task: { id: string } };
-
     // Update task to running
     const [updated] = await db
       .update(agentTasks)
@@ -131,29 +131,30 @@ export async function submitTask(username: string, opts: {
       .returning();
 
     // Start polling for task completion
-    pollTaskCompletion(username, task.id, session.agentPort, data.task.id);
+    pollTaskCompletion(username, task.id, session.agentPort);
 
     return updated;
   } catch (err) {
-    // Mark task as failed
-    const [failed] = await db
+    // Mark task as failed in DB before re-throwing.
+    await db
       .update(agentTasks)
       .set({
         status: 'failed',
         error: err instanceof Error ? err.message : 'Failed to start task',
         completedAt: new Date(),
       })
-      .where(eq(agentTasks.id, task.id))
-      .returning();
+      .where(eq(agentTasks.id, task.id));
     throw err;
   }
 }
 
-// Poll agent-runner for task completion and update DB
-function pollTaskCompletion(username: string, dbTaskId: string, agentPort: number, runnerTaskId: string): void {
+// Poll agent-runner for task completion and update DB.
+// The runner and the DB share the same task id (we pass it through on submit),
+// so we only need one identifier here.
+function pollTaskCompletion(username: string, dbTaskId: string, agentPort: number): void {
   const interval = setInterval(async () => {
     try {
-      const res = await fetch(`http://127.0.0.1:${agentPort}/tasks/${runnerTaskId}`);
+      const res = await fetch(`http://127.0.0.1:${agentPort}/tasks/${dbTaskId}`);
       if (!res.ok) {
         clearInterval(interval);
         return;
@@ -180,10 +181,11 @@ function pollTaskCompletion(username: string, dbTaskId: string, agentPort: numbe
 
       // Send push notification
       try {
-        const statusText = runnerTask.status === 'completed' ? '완료' : '실패';
+        const completed = runnerTask.status === 'completed';
+        const statusText = completed ? 'completed' : 'failed';
         await pushService.sendNotificationToAll({
-          title: `에이전트 작업 ${statusText}`,
-          body: `[${username}] ${runnerTask.status === 'completed' ? '✅' : '❌'} 작업이 ${statusText}되었습니다.`,
+          title: `Agent task ${statusText}`,
+          body: `[${username}] ${completed ? '✅' : '❌'} Task ${statusText}.`,
           url: `/a/${username}/task/${dbTaskId}`,
         });
       } catch (pushErr) {
@@ -206,7 +208,7 @@ function pollTaskCompletion(username: string, dbTaskId: string, agentPort: numbe
     if (task && task.status === 'running') {
       // Try to cancel in runner
       try {
-        await fetch(`http://127.0.0.1:${agentPort}/tasks/${runnerTaskId}`, { method: 'DELETE' });
+        await fetch(`http://127.0.0.1:${agentPort}/tasks/${dbTaskId}`, { method: 'DELETE' });
       } catch {}
       await db
         .update(agentTasks)

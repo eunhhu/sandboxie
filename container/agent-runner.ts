@@ -162,6 +162,7 @@ const server = Bun.serve({
     if (path === '/tasks' && req.method === 'POST') {
       try {
         const body = await req.json() as {
+          id?: string;
           agent: 'claude' | 'codex';
           prompt: string;
           workingDir?: string;
@@ -174,7 +175,9 @@ const server = Bun.serve({
           });
         }
 
-        const id = generateId();
+        // Honour a client-supplied id so the backend can keep its DB id and
+        // the runner's id in sync (needed for cancel / get-by-id).
+        const id = body.id && !tasks.has(body.id) ? body.id : generateId();
         const task: Task = {
           id,
           agent: body.agent,

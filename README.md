@@ -1,5 +1,11 @@
 # Sandboxie
 
+[![CI](https://github.com/eunhhu/sandboxie/actions/workflows/ci.yml/badge.svg)](https://github.com/eunhhu/sandboxie/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+![Bun](https://img.shields.io/badge/Bun-1.3+-f9f1e1)
+![Elysia](https://img.shields.io/badge/Elysia-1.2+-000)
+![SolidJS](https://img.shields.io/badge/SolidJS-1.9-2c4f7c)
+
 A containerized sandbox management system that provides isolated Linux terminal environments accessible via web browsers. Perfect for provisioning temporary development environments for friends, students, or workshop participants.
 
 ## Overview
@@ -916,7 +922,7 @@ psql $DATABASE_URL -c "SELECT 1"
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes
-4. Run tests (`bun test`)
+4. Typecheck (`bun run typecheck`); run e2e tests (`bun run test:e2e`) if you have a local dev server
 5. Commit with conventional commit messages (`git commit -m 'feat: add amazing feature'`)
 6. Push to the branch (`git push origin feature/amazing-feature`)
 7. Open a Pull Request
