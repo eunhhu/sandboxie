@@ -26,10 +26,11 @@ export async function createDnsRecord(username: string, prefix: 'ssh' | 'web' = 
     return 'skipped';
   }
 
-  // Cloudflare 무료 플랜: 1단계 서브도메인만 지원
-  // username-ssh-sandbox.qucord.com (O)
-  // username.ssh.sandbox.qucord.com (X)
-  const domain = config.cfDomain.split('.').slice(-2).join('.'); // qucord.com
+  // Cloudflare's free plan only supports 1-level wildcards, so we flatten
+  // the hierarchy:
+  //   username-ssh-sandbox.example.com  (OK)
+  //   username.ssh.sandbox.example.com  (NOT OK on free plan)
+  const domain = config.cfDomain.split('.').slice(-2).join('.');
   const recordName = `${username}-${prefix}-${config.cfDomain.split('.')[0]}.${domain}`;
 
   console.log(`Creating DNS record: ${recordName} → ${config.cfTunnelId}.cfargotunnel.com`);

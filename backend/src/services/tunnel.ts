@@ -121,7 +121,8 @@ async function writeConfig(cfg: TunnelConfig): Promise<void> {
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
 
 function scheduleRestartTunnel(): void {
-  // 응답이 클라이언트에 전달된 뒤 재시작되도록 딜레이
+  // Debounce the restart so the current HTTP response can finish flushing
+  // before we cycle cloudflared.
   if (restartTimer) clearTimeout(restartTimer);
   restartTimer = setTimeout(async () => {
     restartTimer = null;
@@ -150,23 +151,24 @@ export async function addSshIngress(username: string, sshPort: number): Promise<
     return;
   }
 
-  // Cloudflare 무료 플랜: username-ssh-sandbox.qucord.com
+  // Shape: username-ssh-<subdomain>.<apex> (Cloudflare free plan friendly).
   const domain = config.cfDomain.split('.').slice(-2).join('.');
   const hostname = `${username}-ssh-${config.cfDomain.split('.')[0]}.${domain}`;
 
   const cfg = await readConfig();
 
-  // 이미 존재하면 스킵
+  // Idempotent: skip if already present.
   if (cfg.ingress.some(r => r.hostname === hostname)) {
     console.log(`Ingress already exists for ${hostname}`);
     return;
   }
 
-  // catch-all 규칙 앞에 삽입 (와일드카드, catch-all 앞)
+  // Insert before the catch-all rule — cloudflared matches top-to-bottom
+  // and the catch-all (no hostname) must stay last; also put specific rules
+  // before any wildcard.
   const catchAllIdx = cfg.ingress.findIndex(r => !r.hostname);
   const wildcardIdx = cfg.ingress.findIndex(r => r.hostname?.startsWith('*'));
 
-  // 와일드카드 앞에 삽입 (더 구체적인 규칙이 먼저)
   let insertIdx = catchAllIdx >= 0 ? catchAllIdx : cfg.ingress.length;
   if (wildcardIdx >= 0 && wildcardIdx < insertIdx) {
     insertIdx = wildcardIdx;
@@ -191,19 +193,19 @@ export async function addHttpIngress(username: string, httpPort: number): Promis
     return;
   }
 
-  // Cloudflare 무료 플랜: username-web-sandbox.qucord.com
+  // Shape: username-web-<subdomain>.<apex>.
   const domain = config.cfDomain.split('.').slice(-2).join('.');
   const hostname = `${username}-web-${config.cfDomain.split('.')[0]}.${domain}`;
 
   const cfg = await readConfig();
 
-  // 이미 존재하면 스킵
+  // Idempotent: skip if already present.
   if (cfg.ingress.some(r => r.hostname === hostname)) {
     console.log(`Ingress already exists for ${hostname}`);
     return;
   }
 
-  // catch-all 규칙 앞에 삽입
+  // Insert before the catch-all rule.
   const catchAllIdx = cfg.ingress.findIndex(r => !r.hostname);
   const wildcardIdx = cfg.ingress.findIndex(r => r.hostname?.startsWith('*'));
 
